@@ -1,0 +1,17 @@
+# hc-mcp configuration. Default location: ~/.config/hc-mcp/config.toml
+# (or pass --config <path> to hc-mcp).
+
+[homecore]
+# Base URL of the homeCore REST API. Localhost is fine when MCP runs on
+# the same host; otherwise use the LAN address (or Tailscale name) of
+# the homeCore server.
+base_url = "http://127.0.0.1:8080"
+
+# API key from `hc-cli api-key issue --owner mcp-service --role observer`.
+# Phase 1 is read-only, so the Observer role's scopes (devices:read,
+# automations:read, plugins:read, audit:read, events:read) are enough.
+# Upgrade to ReadOnly or User in later phases when write tools land.
+api_key = "hc_sk_REPLACE_ME"
+
+# Connect timeout (seconds) for outbound REST calls.
+timeout_secs = 5

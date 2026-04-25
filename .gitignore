@@ -59,3 +59,13 @@ node_modules/
 package-lock.json
 npm-debug.log*
 .passwd
+
+# Python (hc-mcp)
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
