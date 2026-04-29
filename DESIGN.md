@@ -4,7 +4,9 @@
 > official Anthropic `mcp` SDK. Exposes typed tools Claude can call for
 > troubleshooting, rule creation, plugin scaffolding, and more.
 
-**Status:** design phase. No code yet. Pick up here to scaffold the repo + Phase 1.
+**Status:** Phase 1 (read-only troubleshooter) + Phase 4a/4b (plugin
+action dispatcher + streaming-action awaiter) shipped. Phases 2 & 3
+pending.
 
 ---
 
@@ -245,14 +247,23 @@ clients/hc-mcp/
 
 Each phase is shippable independently.
 
-### Phase 1 — Read-only troubleshooter (~1-2 days)
-- Repo scaffold: `pyproject.toml`, `mcp` SDK dep, server entry, auth plumbing
-- Transport: stdio first, HTTP/SSE follow-up
-- Tools: `system_health`, `plugin_status`, `plugin_logs`, `core_logs`,
-  `device_state`, `device_history`, `rule_firings`, `find_recent_errors`,
-  `correlation_trace` (~15 tools)
-- Zero write risk. Immediate value for troubleshooting (e.g. current
-  thermostat debugging workflow).
+### Phase 1 — Read-only troubleshooter ✅ (shipped 2026-04-29)
+Tools live: `system_health`, `broker_diagnose`, `list_plugins`,
+`plugin_status`, `plugin_capabilities`, `list_devices`, `device_state`,
+`device_history`, `list_rules`, `get_rule`, `rule_firings`, `rule_test`,
+`recent_events`, `correlation_trace`, `core_logs`, `plugin_logs`,
+`find_recent_errors`. Plus the plugin-action triplet
+(`list_plugin_actions`, `invoke_plugin_action`,
+`await_streaming_plugin_action`) from Phase 4a/4b, which slots into
+the same read-leaning surface.
+
+Outstanding for Phase 1:
+- `mqtt_tap(topic_filter, duration_secs)` — needs a persistent
+  paho-MQTT client. Defer to Phase 4 (mqtt_tap was always part of the
+  "advanced" tier).
+- `hc-mcp setup` CLI — automate api-key creation against an admin
+  JWT. Optional polish; current flow has the operator generate a key
+  via the admin UI and paste it into config.
 
 ### Phase 2 — Device + rule operations (~1 day)
 - `list_devices`, `command_device`, `list_rules`, `create_rule`, `test_rule`,
@@ -277,24 +288,31 @@ value with no write risk. ~1-2 days of work total.
 
 ---
 
-## Resolved decisions (2026-04-20)
+## Resolved decisions
 
 ### 1. Transport — both stdio + HTTP/SSE from day one
 - MCP Python SDK supports both with a flag; marginal extra code.
 - **Phase 1: stdio + HTTP/SSE bound to `127.0.0.1` only.** No public exposure.
 
-### 2. Auth — dedicated `mcp-service` user, credentials-based
-homeCore has no API keys or long-lived tokens today (see "Core auth facts"
-below). So hc-mcp stores **username + password** and re-logs in on startup
-and on any 401.
+### 2. Auth — homeCore API key (long-lived bearer token)  *(updated 2026-04-29)*
+homeCore now has dedicated API keys (`POST /api/v1/auth/api-keys`),
+which superseded the password-login + JWT-refresh flow originally
+planned here. hc-mcp stores a single `api_key` in
+`~/.config/hc-mcp/config.toml` (or via the `HC_MCP_API_KEY` env var)
+and attaches it as `Authorization: Bearer <key>` on every request.
 
-**Account creation:** a `hc-mcp setup` command that:
-- Prompts for an admin JWT (or `--admin-token`) and core URL.
-- Generates a random password.
-- `POST /api/v1/auth/users` with `username=mcp-service`, generated password,
-  `role=ReadOnly` (Phase 1).
-- Writes credentials to `~/.config/hc-mcp/config.toml` (chmod 600).
-- Idempotent: rerun with `--grant-write` flips the role to `User` for Phase 2+.
+Properties:
+- Long-lived. Survives core restarts (no JWT-secret-rotation worry).
+- Audit-friendly. Each key has a name and a creator user; logs show
+  the key id as the actor.
+- Revocable. Rotate via `POST /api/v1/auth/api-keys/{id}/rotate`
+  (or delete and re-issue) without restarting hc-mcp.
+- Role-scoped. Issue with `role = ReadOnly` for Phase 1; flip to
+  `User` when Phase 2 (write tools) lands.
+
+**Setup helper (still TODO — see Phase 1 leftovers):** `hc-mcp setup`
+that walks an admin through generating a key against their core, with
+an idempotent re-run that rotates it on demand.
 
 ### 3. Remote access — local-only in Phase 1
 Revisit in Phase 2. Three tiers considered, in increasing effort:
@@ -304,17 +322,17 @@ Revisit in Phase 2. Three tiers considered, in increasing effort:
 - **Public TLS + OAuth 2.1 (later, maybe never):** MCP spec supports it;
   heavy — cert + OAuth flow. Only if hc-mcp goes off-LAN without a VPN.
 
-### Core auth facts that shape this design
-- JWTs are short-lived (default 24h via `[auth].token_expiry_hours`).
-- **No refresh tokens, no API keys.** Re-login with credentials is the only renewal path.
-- JWT signing secret regenerates on every core restart unless explicitly configured,
-  invalidating all tokens. hc-mcp must treat restarts as implicit session loss —
-  re-login on 401, don't cache tokens across core outages.
-- Roles are coarse: `Admin` / `User` / `ReadOnly`. No per-scope custom roles.
-- An IP whitelist in core config grants Admin bypass for specific CIDRs —
-  available as a fallback if credentials flow proves painful, but it's broader
-  than we want for an audited service account.
-
-Expanding core auth (API keys / service accounts / token persistence) is
-tracked as a separate discussion — if that lands, hc-mcp switches to API keys
-and drops the password-login path.
+### Core auth facts that shape this design  *(updated 2026-04-29)*
+- API keys are the canonical service-account credential. Long-lived,
+  hashed at rest in core's state store, bearer-auth via the same
+  middleware as JWTs.
+- JWT login + refresh tokens also exist (`/auth/login` returns a JWT
+  + refresh token; `/auth/refresh` rotates both). Suited to
+  human-driven UI clients — hc-mcp uses keys instead so a long-running
+  agent doesn't need refresh logic.
+- Roles: `Admin` / `User` / `ReadOnly` (and 7 preset variants per the
+  expanded auth model). API keys inherit the issuer's role at creation.
+- An IP whitelist in core config grants Admin bypass for specific
+  CIDRs — useful fallback for trusted-network deployments where running
+  hc-mcp against `127.0.0.1` and the whitelist makes the api-key step
+  optional. Broader than ideal for an audited service account though.

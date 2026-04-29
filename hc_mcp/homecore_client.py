@@ -78,8 +78,96 @@ class HomeCoreClient:
     async def automation_history(self, rule_id: str, limit: int | None = None) -> list[dict]:
         return await self.get(f"/automations/{rule_id}/history", limit=limit)
 
-    async def list_events(self, limit: int = 50) -> list[dict]:
-        return await self.get("/events", limit=limit)
+    async def list_events(
+        self,
+        limit: int = 50,
+        event_type: str | None = None,
+        device_id: str | None = None,
+    ) -> list[dict]:
+        params: dict[str, Any] = {"limit": limit}
+        if event_type:
+            params["type"] = event_type
+        if device_id:
+            params["device_id"] = device_id
+        return await self.get("/events", **params)
+
+    async def test_automation(self, rule_id: str) -> dict:
+        """POST /automations/{id}/test — dry-run the rule and report
+        which conditions would pass and which actions would fire.
+        """
+        resp = await self._client.post(f"/automations/{rule_id}/test")
+        resp.raise_for_status()
+        return resp.json()
+
+    async def stream_logs(
+        self,
+        max_lines: int,
+        timeout_secs: float,
+        level: str | None = None,
+        module: str | None = None,
+        grep: str | None = None,
+    ) -> list[dict]:
+        """Connect to WS /logs/stream, accumulate up to max_lines that
+        match the filters, then close. Bounded by timeout_secs.
+
+        Returns a list of log records (dicts as emitted by hc-core).
+        Filters applied client-side because the WS protocol may not
+        accept all of them as query params today.
+        """
+        import asyncio
+        import json
+        import re
+
+        from urllib.parse import urlparse, urlunparse
+
+        # Build the WS URL by swapping http(s) → ws(s) on the configured base.
+        parsed = urlparse(self._cfg.base_url)
+        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
+        ws_url = urlunparse((
+            ws_scheme,
+            parsed.netloc,
+            parsed.path.rstrip("/") + "/api/v1/logs/stream",
+            "",
+            "",
+            "",
+        ))
+
+        try:
+            import websockets
+        except ImportError as e:
+            raise RuntimeError(
+                "websockets package required for log streaming; "
+                "install hc-mcp with [websockets] extra"
+            ) from e
+
+        headers = {"Authorization": f"Bearer {self._cfg.api_key}"}
+        grep_re = re.compile(grep) if grep else None
+        out: list[dict] = []
+
+        async def collect() -> None:
+            async with websockets.connect(ws_url, extra_headers=headers) as ws:
+                async for raw in ws:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode("utf-8", errors="replace")
+                    try:
+                        rec = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    if level and rec.get("level", "").lower() != level.lower():
+                        continue
+                    if module and rec.get("module", "") != module:
+                        continue
+                    if grep_re and not grep_re.search(rec.get("message", "")):
+                        continue
+                    out.append(rec)
+                    if len(out) >= max_lines:
+                        return
+
+        try:
+            await asyncio.wait_for(collect(), timeout=timeout_secs)
+        except asyncio.TimeoutError:
+            pass  # return whatever we accumulated
+        return out
 
     # ── Writes ─────────────────────────────────────────────────────────────
     async def send_plugin_command(

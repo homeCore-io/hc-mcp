@@ -26,3 +26,13 @@ def register(mcp: FastMCP) -> None:
         match, per-condition outcome, and which actions ran. Useful when
         diagnosing "the rule never fires"."""
         return await client().automation_history(rule_id, limit=limit)
+
+    @mcp.tool()
+    async def rule_test(rule_id: str) -> dict:
+        """Dry-run a rule against current device state without executing
+        its actions. Returns which conditions pass/fail (with actual vs
+        expected values + reason) and which actions would dispatch.
+        Use this to verify a rule will fire BEFORE waiting for its
+        trigger to occur naturally — much faster debug loop than
+        watching `rule_firings` after-the-fact."""
+        return await client().test_automation(rule_id)
