@@ -14,6 +14,7 @@ inventory live in [`DESIGN.md`](DESIGN.md).
 | Tool | Endpoint | Use |
 |---|---|---|
 | `system_health` | `GET /system/status` | First-stop overall health |
+| `broker_diagnose` | aggregated | MQTT broker + plugin heartbeat sanity check |
 | `list_plugins` | `GET /plugins` | Status of every plugin |
 | `plugin_status` | `GET /plugins/:id` | One plugin in detail |
 | `plugin_capabilities` | `GET /plugins/:id/capabilities` | Declared actions for a plugin |
@@ -23,7 +24,12 @@ inventory live in [`DESIGN.md`](DESIGN.md).
 | `list_rules` | `GET /automations` | All automations |
 | `get_rule` | `GET /automations/:id` | One automation full body |
 | `rule_firings` | `GET /automations/:id/history` | Recent fire history |
+| `rule_test` | `POST /automations/:id/test` | Dry-run a rule against current state |
 | `recent_events` | `GET /events` | Tail of the event ring buffer |
+| `correlation_trace` | client-side filter | Walk a single command's life cycle by correlation_id |
+| `core_logs` | `WS /logs/stream` | Tail of homeCore's structured logs |
+| `plugin_logs` | `WS /logs/stream` | Same, filtered to one plugin |
+| `find_recent_errors` | `WS /logs/stream` | WARN/ERROR across core + every plugin |
 | `list_plugin_actions` | (caps fanout) | Flatten every plugin manifest into one list of actions |
 
 ### Write-gated (require `HC_MCP_ALLOW_WRITE`)
@@ -46,30 +52,45 @@ Python ≥ 3.11 required (TOML stdlib + modern type syntax).
 
 ## Configure
 
-1. **Issue an API key** for the MCP service account on the homeCore host.
-   Read-only Phase 1:
+The packaged `hc-mcp setup` command issues an API key against a running
+homeCore and writes the config file at `~/.config/hc-mcp/config.toml`
+(0600). Two auth paths into homeCore:
 
-   ```bash
-   hc-cli api-key create --label mcp-service \
-       --scopes devices:read,plugins:read,automations:read,events:read,audit:read
-   ```
+```bash
+# Option A — already have an admin JWT (e.g. from the admin UI's
+#            "API tokens" panel):
+hc-mcp setup --base-url http://10.0.10.20:8080 \
+             --admin-token "$ADMIN_JWT"
 
-   To enable `invoke_plugin_action` (Phase 4) you also need `plugins:write`.
-   Issue a separate key for that and only export it from a more-privileged
-   shell when you intend to use action invocation.
+# Option B — log in via /auth/login first:
+hc-mcp setup --base-url http://10.0.10.20:8080 \
+             --username admin
+# (password prompted on stdin)
 
-   The token is printed once — save it.
+# To rotate the key on a host that's already configured:
+hc-mcp setup --rotate
+```
 
-2. **Write a config file** at `~/.config/hc-mcp/config.toml`:
+Defaults: label `hc-mcp`, scopes
+`areas:read,automations:read,audit:read,devices:read,plugins:read,plugins:write,scenes:read`,
+no expiry. Override with `--label`, `--scopes a,b,c`, `--expires-days N`.
 
-   ```toml
-   [homecore]
-   base_url = "http://127.0.0.1:8080"
-   api_key  = "hc_sk_…"   # from step 1
-   timeout_secs = 5
-   ```
+> The admin JWT is only used for the `/auth/api-keys` POST during
+> setup — hc-mcp never stores it. The persisted config holds only the
+> generated long-lived API key.
 
-   Or set `HC_MCP_BASE_URL` / `HC_MCP_API_KEY` env vars instead.
+### Manual fallback
+
+If you'd rather not run setup, write the config yourself:
+
+```toml
+[homecore]
+base_url = "http://127.0.0.1:8080"
+api_key  = "hc_sk_…"        # from the admin UI or a prior setup run
+# timeout_secs = 30.0
+```
+
+…or set `HC_MCP_BASE_URL` / `HC_MCP_API_KEY` env vars.
 
 ## Wire into a Claude client
 

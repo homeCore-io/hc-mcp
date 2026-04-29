@@ -257,13 +257,18 @@ Tools live: `system_health`, `broker_diagnose`, `list_plugins`,
 `await_streaming_plugin_action`) from Phase 4a/4b, which slots into
 the same read-leaning surface.
 
+Setup helper shipped: `hc-mcp setup` ✅
+Provisions an API key against a running homeCore. Two auth paths:
+`--admin-token <jwt>` (or `HC_ADMIN_TOKEN` env) for an existing JWT,
+or `--username/--password` to log in via /auth/login first. Issues a
+key with the Phase 1 + plugin-action scope set by default, writes
+the resulting config.toml at 0600. `--rotate` re-issues; `--force`
+overwrites without rotating (manual paste flow).
+
 Outstanding for Phase 1:
 - `mqtt_tap(topic_filter, duration_secs)` — needs a persistent
   paho-MQTT client. Defer to Phase 4 (mqtt_tap was always part of the
   "advanced" tier).
-- `hc-mcp setup` CLI — automate api-key creation against an admin
-  JWT. Optional polish; current flow has the operator generate a key
-  via the admin UI and paste it into config.
 
 ### Phase 2 — Device + rule operations (~1 day)
 - `list_devices`, `command_device`, `list_rules`, `create_rule`, `test_rule`,
