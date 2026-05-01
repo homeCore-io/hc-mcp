@@ -37,8 +37,31 @@ inventory live in [`DESIGN.md`](DESIGN.md).
 | Tool | Category | Effect |
 |---|---|---|
 | `invoke_plugin_action` | `plugin_actions` | POST `/plugins/:id/command` for non-streaming manifest actions |
+| `await_streaming_plugin_action` | `plugin_actions` | POST + read SSE stream for streaming manifest actions; returns aggregated terminal payload |
+| `command_device` | `device_commands` | PATCH `/devices/:id/state` — turn things on/off, set brightness, lock doors, etc. |
+| `bulk_command` | `device_commands` | Fan out commands across many devices in parallel; per-device success reported |
+| `enable_rule` / `disable_rule` | `rule_mutations` | PATCH `/automations/:id` to flip the enabled flag |
+| `delete_rule` | `rule_mutations` | DELETE `/automations/:id` (also patches references in other rules) |
+| `create_rule` | `rule_mutations` | POST `/automations` with a full Rule body |
+| `update_rule` | `rule_mutations` | PUT `/automations/:id` — full replace of the rule body |
 
-Set `HC_MCP_ALLOW_WRITE=plugin_actions` (or `all`) in the hc-mcp environment to enable. Streaming actions return an explanatory error in this round — Phase 4b will add a stream-aware variant that awaits the terminal stage.
+Set `HC_MCP_ALLOW_WRITE` to a comma-separated list of categories (or
+`all`) in the hc-mcp environment to enable. Each category is opt-in
+independently — for example, `HC_MCP_ALLOW_WRITE=device_commands` lets
+Claude turn on lights but not edit rules.
+
+```bash
+# In your Claude Desktop / Claude Code MCP server entry:
+"env": {
+  "HC_MCP_ALLOW_WRITE": "device_commands,rule_mutations,plugin_actions"
+}
+```
+
+Streaming plugin actions are handled by `await_streaming_plugin_action`,
+which reads the SSE stream until a terminal stage and returns the
+aggregated result. Tools work universally regardless of how homeCore
+was installed (local, docker, remote) — they all go through the REST
+API.
 
 ## Install
 
@@ -124,22 +147,25 @@ To smoke-test outside an MCP client:
 The server speaks MCP over stdio; you can drive it with the MCP
 inspector or any conformant client.
 
-## Phase 1 limitations
+## Current limitations
 
 - **stdio only.** HTTP/SSE transport (so Claude Desktop on another
   machine can connect over Tailscale) lands in a follow-up.
-- **Read-only.** No `command_device`, `create_rule`, or `scaffold_plugin`
-  yet — those are gated behind a future `HC_MCP_ALLOW_WRITE` flag.
-- **No live MQTT tap.** `mqtt_tap` and `correlation_trace` need a
-  persistent MQTT client; deferred to Phase 4.
+- **No install-aware substrate.** Tools that would need direct host
+  access (journalctl, `docker logs`, config-file reads, service
+  restarts) are not yet implemented. The substrate-aware design is
+  parked at `claude-notes/plans/hc_mcp_install_aware.md` (DEFERRED).
+- **No live MQTT tap.** `mqtt_tap` needs a persistent MQTT client;
+  deferred to Phase 4.
 
 ## Roadmap
 
 See `DESIGN.md`. Briefly:
 
-- **Phase 2** — device + rule write tools + write-category gating.
 - **Phase 3** — plugin scaffolding (`scaffold_plugin`, `check_plugin`).
-- **Phase 4** — MQTT tap, rule graph, anomaly detection, audit tools.
+- **Phase 4 (advanced)** — MQTT tap, rule graph, anomaly detection,
+  audit tools.
+- **Install-aware substrate** — DEFERRED; revisit after scope review.
 
 ## License
 

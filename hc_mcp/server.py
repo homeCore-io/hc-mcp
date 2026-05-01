@@ -27,6 +27,7 @@ from . import server_state
 from . import setup_cli
 from .homecore_client import HomeCoreClient
 from .tools import (
+    commands,
     devices,
     events,
     plugin_actions,
@@ -45,6 +46,7 @@ def build_server(client: HomeCoreClient) -> FastMCP:
     devices.register(mcp)
     rules.register(mcp)
     events.register(mcp)
+    commands.register(mcp)
     plugin_actions.register(mcp)
     troubleshooting.register(mcp)
     return mcp
