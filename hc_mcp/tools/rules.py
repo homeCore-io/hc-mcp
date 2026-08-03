@@ -13,14 +13,12 @@ from mcp.server.fastmcp import FastMCP
 from ..permissions import ensure_write
 from ..server_state import client
 
-
 WRITE_CATEGORY = "rule_mutations"
 
 
 def _wrap_http_error(label: str, e: httpx.HTTPStatusError) -> RuntimeError:
     return RuntimeError(
-        f"{label} failed: HTTP {e.response.status_code} — "
-        f"{e.response.text or '(empty body)'}"
+        f"{label} failed: HTTP {e.response.status_code} — {e.response.text or '(empty body)'}"
     )
 
 

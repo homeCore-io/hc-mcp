@@ -41,9 +41,7 @@ def load(explicit_path: str | None = None) -> Config:
         file_data = raw.get("homecore", {})
 
     base_url = (
-        os.environ.get("HC_MCP_BASE_URL")
-        or file_data.get("base_url")
-        or "http://127.0.0.1:8080"
+        os.environ.get("HC_MCP_BASE_URL") or file_data.get("base_url") or "http://127.0.0.1:8080"
     )
     api_key = os.environ.get("HC_MCP_API_KEY") or file_data.get("api_key")
     if not api_key:

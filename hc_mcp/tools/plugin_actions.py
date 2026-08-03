@@ -23,7 +23,6 @@ from mcp.server.fastmcp import FastMCP
 from ..permissions import ensure_write
 from ..server_state import client
 
-
 WRITE_CATEGORY = "plugin_actions"
 
 TERMINAL_STAGES = {"complete", "error", "canceled", "timeout"}
@@ -254,7 +253,7 @@ def register(mcp: FastMCP) -> None:
 
         try:
             await asyncio.wait_for(_consume(), timeout=timeout_secs)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             terminal = {
                 "stage": "timeout",
                 "message": (

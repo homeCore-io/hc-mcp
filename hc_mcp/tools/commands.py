@@ -21,7 +21,6 @@ from mcp.server.fastmcp import FastMCP
 from ..permissions import ensure_write
 from ..server_state import client
 
-
 WRITE_CATEGORY = "device_commands"
 
 
@@ -106,8 +105,7 @@ def register(mcp: FastMCP) -> None:
                 return {
                     "device_id": device_id,
                     "ok": False,
-                    "error": f"HTTP {e.response.status_code} — "
-                    f"{e.response.text or '(empty body)'}",
+                    "error": f"HTTP {e.response.status_code} — {e.response.text or '(empty body)'}",
                 }
             except Exception as e:  # noqa: BLE001 — surface anything to the caller
                 return {"device_id": device_id, "ok": False, "error": str(e)}
