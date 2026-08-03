@@ -1,0 +1,85 @@
+name: CI
+
+# This repo had no CI at all until 2026-08-03. Phase 2 — the device and rule
+# *write* tools — was merged to main having never been run by anything, and at
+# that point `pip install hc-mcp` produced a server that could not start:
+# `mcp>=1.0` had begun resolving to mcp 2.0, which removed the module every
+# file here imports. Nothing noticed, because nothing looked.
+#
+# So the install job is not ceremony. It is the check that would have caught it.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  # Weekly, to catch the same failure mode the pin now guards against: a
+  # dependency that starts resolving somewhere new while this repo is idle.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared in pyproject; 3.13 is what a fresh
+        # install picks up. Both, because the floor is a promise.
+        python-version: ['3.11', '3.13']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      # A plain resolve, not a lockfile: this repo ships none, so what CI
+      # installs is what a user installing today gets. That is the point.
+      - name: Install the package and its dev extras
+        run: uv venv --python ${{ matrix.python-version }} && uv pip install -e '.[dev]'
+
+      - name: Import every module
+        # Cheaper and more legible than waiting for pytest collection to fail,
+        # and it fails on the module that is actually broken.
+        run: |
+          uv run python - <<'PY'
+          import importlib, pkgutil, sys
+          import hc_mcp
+          failed = []
+          for m in pkgutil.walk_packages(hc_mcp.__path__, "hc_mcp."):
+              try:
+                  importlib.import_module(m.name)
+                  print(f"  ok   {m.name}")
+              except Exception as e:
+                  print(f"  FAIL {m.name}: {type(e).__name__}: {e}")
+                  failed.append(m.name)
+          sys.exit(1 if failed else 0)
+          PY
+
+      - name: The console script is callable
+        # `hc-mcp` is the entry point Claude Desktop and Claude Code launch. It
+        # exits non-zero without config, so check --help rather than a bare run.
+        run: uv run hc-mcp --help
+
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+
+      - name: pytest
+        run: uv run pytest -q
