@@ -69,3 +69,7 @@ build/
 dist/
 .pytest_cache/
 .ruff_cache/
+# Deliberately not committed: CI resolves dependencies fresh so it installs
+# what a user installing today would get. A committed lock would have hidden
+# mcp>=1.0 starting to resolve to 2.0, which is the bug that motivated CI here.
+uv.lock
