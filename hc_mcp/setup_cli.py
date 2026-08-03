@@ -29,7 +29,6 @@ import httpx
 
 from .config import Config
 
-
 # Phase 1 + plugin-action scope set. Read-only across the surfaces
 # hc-mcp's current tools touch, plus plugins:write so
 # invoke_plugin_action can dispatch commands.
@@ -136,9 +135,7 @@ def run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
-        password = args.password or getpass.getpass(
-            f"Password for {args.username}: "
-        )
+        password = args.password or getpass.getpass(f"Password for {args.username}: ")
         try:
             admin_token = _login(base_url, args.username, password)
         except RuntimeError as e:

@@ -12,7 +12,13 @@ requires-python = ">=3.11"
 authors = [{ name = "John Eubanks", email = "john@eubanks.io" }]
 
 dependencies = [
-    "mcp>=1.0",
+    # <2 is a real constraint, not caution. mcp 2.0 removed
+    # `mcp.server.fastmcp` (FastMCP became MCPServer under
+    # mcp.server.mcpserver), so every module here fails to import against it.
+    # `mcp>=1.0` had already started resolving to 2.0 — a fresh install of this
+    # package produced a server that could not start. Lift the pin only
+    # together with the port to the 2.x API.
+    "mcp>=1.0,<2",
     "httpx>=0.27",
     "pydantic>=2.6",
     "websockets>=12.0",
@@ -34,3 +40,9 @@ packages = ["hc_mcp"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Async tests carry an explicit @pytest.mark.asyncio; strict mode means a
+# forgotten marker fails loudly instead of silently never awaiting.
+asyncio_mode = "strict"

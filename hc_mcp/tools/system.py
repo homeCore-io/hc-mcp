@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC
 
 from mcp.server.fastmcp import FastMCP
 
@@ -51,11 +52,13 @@ def register(mcp: FastMCP) -> None:
             if p.get("status") == "active":
                 active += 1
                 if hb_age is not None and hb_age > stale_threshold_secs:
-                    stale.append({
-                        "plugin_id": p.get("plugin_id"),
-                        "status": p.get("status"),
-                        "last_heartbeat_age_secs": int(hb_age),
-                    })
+                    stale.append(
+                        {
+                            "plugin_id": p.get("plugin_id"),
+                            "status": p.get("status"),
+                            "last_heartbeat_age_secs": int(hb_age),
+                        }
+                    )
             else:
                 offline += 1
 
@@ -69,9 +72,7 @@ def register(mcp: FastMCP) -> None:
                 "stale_heartbeat": stale,
             },
             "broker_likely_healthy": (
-                status.get("uptime_seconds", 0) > 0
-                and active > 0
-                and len(stale) == 0
+                status.get("uptime_seconds", 0) > 0 and active > 0 and len(stale) == 0
             ),
         }
 
@@ -87,12 +88,21 @@ async def _gather(c) -> tuple[dict, list[dict]]:
 
 
 def _seconds_since_iso(iso: str, now: float) -> float | None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     try:
-        # homeCore emits RFC 3339 with a trailing Z.
-        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
+        # homeCore emits RFC 3339 with a trailing Z, which fromisoformat has
+        # accepted natively since 3.11 — this package requires 3.11, so the
+        # old `.replace("Z", "+00:00")` dance is gone (ruff FURB162).
+        dt = datetime.fromisoformat(iso)
+    except (ValueError, TypeError, AttributeError):
+        # TypeError covers a non-string — previously that surfaced as
+        # AttributeError from the `.replace()` on the way in, so dropping the
+        # replace quietly narrowed what this tolerated. system_health reports
+        # on every plugin in one call and must not die on one bad field.
         return None
-    epoch = dt.replace(tzinfo=dt.tzinfo or timezone.utc).timestamp()
-    return now - epoch
+    # A naive datetime means the timestamp carried no offset at all; treat it
+    # as UTC rather than letting .timestamp() silently read it as local time.
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return now - dt.timestamp()

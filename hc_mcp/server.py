@@ -23,8 +23,7 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from . import config as cfg_mod
-from . import server_state
-from . import setup_cli
+from . import server_state, setup_cli
 from .homecore_client import HomeCoreClient
 from .tools import (
     commands,
@@ -82,8 +81,7 @@ def main() -> None:
         # Surface auth setup issues clearly — Claude Code shows MCP stderr.
         print(f"hc-mcp: {e}", file=sys.stderr)
         print(
-            "  Run `hc-mcp setup` to provision an API key against your "
-            "homeCore instance.",
+            "  Run `hc-mcp setup` to provision an API key against your homeCore instance.",
             file=sys.stderr,
         )
         sys.exit(2)

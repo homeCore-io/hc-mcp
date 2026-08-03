@@ -117,20 +117,21 @@ class HomeCoreClient:
         import asyncio
         import json
         import re
-
         from urllib.parse import urlparse, urlunparse
 
         # Build the WS URL by swapping http(s) → ws(s) on the configured base.
         parsed = urlparse(self._cfg.base_url)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        ws_url = urlunparse((
-            ws_scheme,
-            parsed.netloc,
-            parsed.path.rstrip("/") + "/api/v1/logs/stream",
-            "",
-            "",
-            "",
-        ))
+        ws_url = urlunparse(
+            (
+                ws_scheme,
+                parsed.netloc,
+                parsed.path.rstrip("/") + "/api/v1/logs/stream",
+                "",
+                "",
+                "",
+            )
+        )
 
         try:
             import websockets
@@ -165,7 +166,7 @@ class HomeCoreClient:
 
         try:
             await asyncio.wait_for(collect(), timeout=timeout_secs)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # return whatever we accumulated
         return out
 
@@ -189,9 +190,7 @@ class HomeCoreClient:
         "<attr>": <value>, ...}`. The plugin's capability schema lists
         valid attributes for each device.
         """
-        resp = await self._client.patch(
-            f"/devices/{device_id}/state", json=command
-        )
+        resp = await self._client.patch(f"/devices/{device_id}/state", json=command)
         resp.raise_for_status()
         # Some core paths return 204 No Content on success.
         if resp.status_code == 204 or not resp.content:
