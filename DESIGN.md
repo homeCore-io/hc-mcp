@@ -4,9 +4,12 @@
 > official Anthropic `mcp` SDK. Exposes typed tools Claude can call for
 > troubleshooting, rule creation, plugin scaffolding, and more.
 
-**Status:** Phase 1 (read-only troubleshooter) + Phase 4a/4b (plugin
-action dispatcher + streaming-action awaiter) shipped. Phases 2 & 3
-pending.
+**Status:** Phase 1 (read-only troubleshooter) + Phase 2 (device + rule
+mutation) + Phase 4a/4b (plugin action dispatcher + streaming-action
+awaiter) shipped. Phase 3 (plugin scaffolding) pending. An
+install-aware substrate proposal (Tier B / InstallContext) is parked at
+`claude-notes/plans/hc_mcp_install_aware.md` (DEFERRED — needs scope
+review before resuming).
 
 ---
 
@@ -270,10 +273,14 @@ Outstanding for Phase 1:
   paho-MQTT client. Defer to Phase 4 (mqtt_tap was always part of the
   "advanced" tier).
 
-### Phase 2 — Device + rule operations (~1 day)
-- `list_devices`, `command_device`, `list_rules`, `create_rule`, `test_rule`,
-  `enable_rule`, `disable_rule`, `bulk_command` (~10 tools)
-- Introduce write-category gating
+### Phase 2 — Device + rule operations ✅ (shipped 2026-05-01)
+Tools live: `command_device`, `bulk_command` (write category
+`device_commands`); `enable_rule`, `disable_rule`, `delete_rule`,
+`create_rule`, `update_rule` (write category `rule_mutations`). All go
+through the homeCore REST API so they work universally regardless of
+install method (local / docker / remote). Existing
+`permissions.ensure_write(category)` mechanism reused — operator opts
+in via `HC_MCP_ALLOW_WRITE=device_commands,rule_mutations` (or `all`).
 
 ### Phase 3 — Plugin scaffolding (~2 days)
 - `scaffold_plugin` for Rust (biggest template set), others later

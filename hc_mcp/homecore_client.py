@@ -182,6 +182,64 @@ class HomeCoreClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def command_device(self, device_id: str, command: dict) -> dict:
+        """PATCH /devices/{id}/state — issue a command to a device.
+
+        Body shape is plugin-specific; typically `{"action": "set",
+        "<attr>": <value>, ...}`. The plugin's capability schema lists
+        valid attributes for each device.
+        """
+        resp = await self._client.patch(
+            f"/devices/{device_id}/state", json=command
+        )
+        resp.raise_for_status()
+        # Some core paths return 204 No Content on success.
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "device_id": device_id}
+        return resp.json()
+
+    async def enable_automation(self, rule_id: str) -> dict:
+        return await self._patch_automation(rule_id, {"enabled": True})
+
+    async def disable_automation(self, rule_id: str) -> dict:
+        return await self._patch_automation(rule_id, {"enabled": False})
+
+    async def set_automation_priority(self, rule_id: str, priority: int) -> dict:
+        return await self._patch_automation(rule_id, {"priority": priority})
+
+    async def _patch_automation(self, rule_id: str, patch: dict) -> dict:
+        resp = await self._client.patch(f"/automations/{rule_id}", json=patch)
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "rule_id": rule_id, "patch": patch}
+        return resp.json()
+
+    async def delete_automation(self, rule_id: str) -> dict:
+        """DELETE /automations/{id} — removes the rule and patches any
+        rule files that reference its devices. Core returns
+        ``{affected_rules: [...]}`` per CLAUDE.md."""
+        resp = await self._client.delete(f"/automations/{rule_id}")
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "rule_id": rule_id, "affected_rules": []}
+        return resp.json()
+
+    async def create_automation(self, rule: dict) -> dict:
+        """POST /automations — create a new rule. Body shape per the
+        Rule struct in CLAUDE.md (trigger / conditions / actions).
+        """
+        resp = await self._client.post("/automations", json=rule)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def update_automation(self, rule_id: str, rule: dict) -> dict:
+        """PUT /automations/{id} — full replace of the rule body."""
+        resp = await self._client.put(f"/automations/{rule_id}", json=rule)
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "rule_id": rule_id}
+        return resp.json()
+
     async def stream_plugin_command(
         self,
         plugin_id: str,
