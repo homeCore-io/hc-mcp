@@ -186,9 +186,9 @@ class HomeCoreClient:
     async def command_device(self, device_id: str, command: dict) -> dict:
         """PATCH /devices/{id}/state — issue a command to a device.
 
-        Body shape is plugin-specific; typically `{"action": "set",
-        "<attr>": <value>, ...}`. The plugin's capability schema lists
-        valid attributes for each device.
+        Body is an attribute write (`{"<attr>": <value>, ...}`) or a
+        declared action (`{"action": "<name>", ...params}`). The device's
+        schema lists its writable attributes and actions.
         """
         resp = await self._client.patch(f"/devices/{device_id}/state", json=command)
         resp.raise_for_status()

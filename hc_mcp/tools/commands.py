@@ -3,9 +3,10 @@
 Two tools, both write-gated behind ``HC_MCP_ALLOW_WRITE=device_commands``
 (also satisfied by ``HC_MCP_ALLOW_WRITE=all``):
 
-- ``command_device``: dispatch a command to a single device. Body is the
-  plugin's action-specific payload (e.g. ``{"action": "set", "on": true,
-  "brightness": 200}`` for a light). Maps to PATCH /devices/{id}/state.
+- ``command_device``: dispatch a command to a single device. Body is an
+  attribute write (e.g. ``{"on": true, "brightness_pct": 80}`` for a light)
+  or a declared action (``{"action": "<name>", ...params}``). Maps to
+  PATCH /devices/{id}/state.
 - ``bulk_command``: fan out the same OR per-device commands across many
   devices. Each entry is dispatched independently; failures are collected
   and reported per-device rather than aborting the batch.
@@ -30,17 +31,35 @@ def register(mcp: FastMCP) -> None:
         """Issue a command to a single device.
 
         ``command`` is the JSON body forwarded to the plugin via core's
-        PATCH /devices/{id}/state. Shape is plugin-specific — typically
-        ``{"action": "set", "<attr>": <value>, ...}``. Use
-        ``device_state(device_id)`` first to see the device's current
-        attributes and ``plugin_capabilities(plugin_id)`` to learn the
-        valid command shapes.
+        PATCH /devices/{id}/state. It takes one of two shapes:
+
+          - an attribute write — ``{"<attr>": <value>, ...}`` — for any
+            attribute the device's schema marks writable;
+          - a declared action — ``{"action": "<name>", ...params}`` — for
+            actions listed in the device's schema.
+
+        ``{"command": ...}`` is not a valid shape. Use
+        ``device_state(device_id)`` first to see the device's attributes,
+        which are writable, and its actions.
+
+        Devices share one vocabulary: ``on``, ``brightness_pct`` (0–100),
+        ``color_temp`` (kelvin), ``color_rgb`` (``{"r","g","b"}`` 0–255),
+        ``transition_ms``, ``locked``, ``position`` (cover, 0–100, 100 open),
+        ``volume`` (0–100), ``muted``, ``hvac_mode``, ``fan_mode``,
+        ``setpoint`` / ``heat_setpoint`` / ``cool_setpoint`` (°C). Read-only
+        terms include ``open``, ``motion``, ``occupied``, ``battery_pct``,
+        ``temperature`` (°C), ``humidity``, ``illuminance`` (lux),
+        ``hvac_action``. Temperatures are always °C — convert a °F request
+        before sending.
 
         Examples:
-          - Light on full:    ``{"action": "set", "on": true, "brightness": 255}``
-          - Light off:        ``{"action": "set", "on": false}``
-          - Lock a door:      ``{"action": "set", "locked": true}``
-          - Activate scene:   ``{"action": "activate"}``
+          - Light on full:     ``{"on": true, "brightness_pct": 100}``
+          - Warm white, fade:  ``{"color_temp": 2700, "transition_ms": 500}``
+          - Light off:         ``{"on": false}``
+          - Lock a door:       ``{"locked": true}``
+          - Heat to 20 °C:     ``{"hvac_mode": "heat", "heat_setpoint": 20}``
+          - Activate scene:    ``{"action": "activate"}``
+          - Start a timer:     ``{"action": "start", "duration_secs": 600}``
 
         Returns the core response body (typically ``{"ok": true,
         "device_id": "..."}`` or the updated state). Raises on HTTP 4xx
@@ -62,7 +81,9 @@ def register(mcp: FastMCP) -> None:
         """Fan out commands across many devices in parallel.
 
         Each entry in ``commands`` is ``{"device_id": "<id>", "command":
-        {...}}``. Commands run concurrently; per-device failures are
+        {...}}``, where the inner body takes the same shapes as
+        ``command_device`` (an attribute write or ``{"action": ...}``).
+        Commands run concurrently; per-device failures are
         captured rather than aborting the batch.
 
         Returns:
@@ -78,7 +99,8 @@ def register(mcp: FastMCP) -> None:
           }``
 
         Use for "turn off everything in the living room" or "set every
-        thermostat to 68" patterns. The response shape lets you see
+        thermostat to 20 °C" patterns (setpoints are °C; convert 68 °F to
+        20 °C first). The response shape lets you see
         exactly which devices acknowledged and which didn't.
 
         Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or
