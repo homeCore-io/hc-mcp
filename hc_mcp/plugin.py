@@ -84,6 +84,8 @@ NOT_ADMIN = "Only an admin can change the assistant's settings."
 ACCESS_WAIT_SECS = 5.0
 #: How often old chats are cleared out.
 PRUNE_EVERY_SECS = 3600
+# How long access from homeCore may take before the plugin says it's missing.
+REST_ACCESS_GRACE_SECS = 15
 
 _OWNER = {"type": "string"}
 _CHAT_ID = {"type": "string", "pattern": "^[0-9a-f]{32}$"}
@@ -211,6 +213,7 @@ class AssistantPlugin(PluginBase):
         self._settings: SettingsStore | None = None
         self._chats: ChatStore | None = None
         self._last_prune = 0.0
+        self._connected_at = time.monotonic()
         self._forwarding_logs = False
 
     # ── stores ────────────────────────────────────────────────────────────
@@ -263,7 +266,11 @@ class AssistantPlugin(PluginBase):
             )
         else:
             self.notices.clear("no_api_key")
-        if self.api_access is None:
+        # homeCore sends access a moment after the plugin connects. Say it's
+        # missing only once that moment has clearly passed, or the notice
+        # flashes up on every start and lingers in the app until a reload.
+        late = time.monotonic() - self._connected_at >= REST_ACCESS_GRACE_SECS
+        if self.api_access is None and late:
             self.notices.raise_(
                 PluginNotice.info(
                     "no_rest_access",
@@ -285,7 +292,11 @@ class AssistantPlugin(PluginBase):
         self.enable_management(version=__version__, capabilities=capabilities())
         self.publish_plugin_status("active")
         self._prune(force=True)
+        self._connected_at = time.monotonic()
         self._refresh_notices()
+        later = threading.Timer(REST_ACCESS_GRACE_SECS + 1, self._refresh_notices)
+        later.daemon = True
+        later.start()
 
     def on_command(self, device_id: str, payload: dict) -> None:
         # The assistant has no devices of its own.

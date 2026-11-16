@@ -271,3 +271,18 @@ def test_data_dir_by_hand_and_by_setting(tmp_path, monkeypatch):
     assert data_dir_for(str(cfg), {"assistant": {"data_dir": "keep"}}) == str(tmp_path / "keep")
     monkeypatch.setenv("HC_MCP_DATA_DIR", "/elsewhere")
     assert data_dir_for(str(cfg)) == "/elsewhere"
+
+
+def test_missing_access_is_mentioned_only_once_it_is_late(made, monkeypatch):
+    """homeCore sends access a moment after connecting; saying it's missing
+    before then would show a notice that lingers in the app."""
+    p, *_ = made
+    p._connected_at = 1000.0
+    monkeypatch.setattr(plugin_mod.time, "monotonic", lambda: 1000.0 + 2)
+    p._refresh_notices()
+    assert "no_rest_access" not in p.notices._notices
+    monkeypatch.setattr(
+        plugin_mod.time, "monotonic", lambda: 1000.0 + plugin_mod.REST_ACCESS_GRACE_SECS + 1
+    )
+    p._refresh_notices()
+    assert "no_rest_access" in p.notices._notices
