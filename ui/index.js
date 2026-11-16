@@ -77,6 +77,7 @@ const CHAT_CSS = `
 	background: var(--sheet, #fbfaf6); color: var(--ink, #1e2126);
 	font-family: var(--font, system-ui, sans-serif); }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 button { font: inherit; cursor: pointer; }
 button:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent, #9a4a07); outline-offset: 2px; }
 .head { height: 56px; flex: none; display: flex; align-items: center; gap: 8px;
