@@ -105,7 +105,7 @@ def test_the_manifest_asks_for_rest_access_and_declares_the_chat(made):
 
 
 def test_the_ui_folder_is_a_valid_plugin_ui():
-    loaded = ui.load(UI_DIR, "0.2.0").to_dict()
+    loaded = ui.load(UI_DIR, "0.1.1").to_dict()
     slots = {s["slot"]: s for s in loaded["slots"]}
     assert slots["app.assistant"]["element"] == "hc-mcp-chat"
     assert slots["app.assistant"]["label"] == "Ask"
@@ -260,7 +260,7 @@ def test_the_confirm_card_is_answered_through_respond(made):
 
 def test_data_dir_in_a_runtime_survives_upgrades(tmp_path, monkeypatch):
     monkeypatch.delenv("HC_MCP_DATA_DIR", raising=False)
-    cfg = tmp_path / "plugins" / "plugin.mcp" / "0.2.0" / "config.toml"
+    cfg = tmp_path / "plugins" / "plugin.mcp" / "0.1.1" / "config.toml"
     assert data_dir_for(str(cfg)) == str(tmp_path / "plugins" / "plugin.mcp" / "data")
 
 

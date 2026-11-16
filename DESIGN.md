@@ -13,7 +13,7 @@ review before resuming).
 
 ---
 
-## The Assistant (0.2.0): the same tools as a chat in the app
+## The Assistant (0.1.1): the same tools as a chat in the app
 
 hc-mcp also runs as a homeCore plugin, `plugin.mcp`, behind an "Ask" button in
 the app. The pieces:

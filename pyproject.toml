@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hc-mcp"
-version = "0.2.0"
+version = "0.1.1"
 description = "Model Context Protocol server for homeCore, and its in-app Assistant"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }

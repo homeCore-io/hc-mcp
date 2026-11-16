@@ -4,7 +4,7 @@ Model Context Protocol server for [homeCore](https://github.com/homeCore-io/home
 Exposes typed tools that an MCP-aware LLM client (Claude Desktop, Claude
 Code, etc.) can call to inspect a running homeCore instance.
 
-**Status:** read and write tools for MCP clients, and (0.2.0) the same tools
+**Status:** read and write tools for MCP clients, and (0.1.1) the same tools
 as the homeCore app's Assistant chat; see "The Assistant" below. Roadmap and
 full tool inventory live in [`DESIGN.md`](DESIGN.md).
 
@@ -192,7 +192,7 @@ streams to them is in [`docs/chat-events.md`](docs/chat-events.md).
 
 The runtime artifact builds with `hc-scripts/build-python-artifact.sh
 --plugin clients/hc-mcp --sdk sdks/hc-plugin-sdk-py` (checked locally:
-`plugin.mcp-0.2.0-python-cp312-manylinux_2_28-x86_64.tar.zst`, installs
+`plugin.mcp-0.1.1-python-cp312-manylinux_2_28-x86_64.tar.zst`, installs
 offline, finds its UI). Not done yet:
 
 - **Tag the SDK `v0.5.5` first.** `[tool.uv.sources]` takes the SDK from that
