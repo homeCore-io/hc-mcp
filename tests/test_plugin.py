@@ -98,10 +98,10 @@ def test_the_manifest_asks_for_rest_access_and_declares_the_chat(made):
     actions = {a["id"]: a for a in manifest["actions"]}
     chat = actions["chat"]
     assert chat["stream"] and chat["cancelable"] and chat["concurrency"] == "multi"
-    assert chat["requires_role"] == "user"
+    assert chat["requires_role"] == "signed_in"
     assert actions["settings_set"]["requires_role"] == "admin"
     assert actions["test_key"]["requires_role"] == "admin"
-    assert actions["chats"]["requires_role"] == "read_only"
+    assert actions["chats"]["requires_role"] == "signed_in"
 
 
 def test_the_ui_folder_is_a_valid_plugin_ui():

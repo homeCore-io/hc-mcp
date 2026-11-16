@@ -25,7 +25,7 @@ nothing.
 - `units`: `F` or `C`, how the person reads temperatures (`host.units`).
 
 homeCore adds who is asking (`caller`); the plugin never takes that from the
-browser. The action is declared `requires_role: user`, so anyone signed in may
+browser. The action is declared `requires_role: signed_in`, so anyone signed in may
 chat; the tools the model gets are only those the person's own scopes cover
 and the settings allow.
 
@@ -119,9 +119,9 @@ own chats.
 
 | Action | Role | Params | Answer |
 |---|---|---|---|
-| `chats` | read_only | none | `{ ok, chats: [{id, title, updated}] }`, newest first |
-| `chat_get` | read_only | `chat_id` | `{ ok, chat: {id, title, created, updated, turns} }` |
-| `chat_delete` | read_only | `chat_id` | `{ ok }` |
+| `chats` | signed_in | none | `{ ok, chats: [{id, title, updated}] }`, newest first |
+| `chat_get` | signed_in | `chat_id` | `{ ok, chat: {id, title, created, updated, turns} }` |
+| `chat_delete` | signed_in | `chat_id` | `{ ok }` |
 | `settings_get` | admin | none | the settings below, plus `version` and `rest_access: {ready, scopes}` |
 | `settings_set` | admin | any of the settings | `{ ok, ...settings }` or `{ ok: false, error }` |
 | `test_key` | admin | `api_key?`, `model?` | `{ ok, message }` or `{ ok: false, error, reason }` |

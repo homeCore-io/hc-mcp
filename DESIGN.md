@@ -40,7 +40,7 @@ the app. The pieces:
   with tool use, streamed). An OpenAI-compatible or local endpoint would be one
   more class.
 - **The plugin** (`hc_mcp/plugin.py`): declares `api_scopes`, the streaming
-  `chat` action (`requires_role: user`, many at once, cancelable) and the
+  `chat` action (`requires_role: signed_in`, many at once, cancelable) and the
   immediate ones the screens use; keeps settings and each person's chats in its
   own data folder. A missing key, an API failure, or REST access that has not
   arrived never stops it: it logs, raises a notice, and the chat says so.

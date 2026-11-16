@@ -110,7 +110,7 @@ def capabilities() -> Capabilities:
                 cancelable=True,
                 concurrency=Concurrency.MULTI,
                 item_key="id",
-                requires_role=RequiresRole.USER,
+                requires_role=RequiresRole.SIGNED_IN,
                 # Long enough for a confirm card to wait for its answer.
                 timeout_ms=15 * 60 * 1000,
             ),
@@ -118,7 +118,7 @@ def capabilities() -> Capabilities:
                 id="chats",
                 label="Past chats",
                 description="Your own chats with the assistant, newest first.",
-                requires_role=RequiresRole.READ_ONLY,
+                requires_role=RequiresRole.SIGNED_IN,
             ),
             Action(
                 id="chat_get",
@@ -126,7 +126,7 @@ def capabilities() -> Capabilities:
                 description="One of your own chats.",
                 params={"type": "object", "properties": {"chat_id": _CHAT_ID},
                         "required": ["chat_id"]},
-                requires_role=RequiresRole.READ_ONLY,
+                requires_role=RequiresRole.SIGNED_IN,
             ),
             Action(
                 id="chat_delete",
@@ -134,7 +134,7 @@ def capabilities() -> Capabilities:
                 description="Delete one of your own chats.",
                 params={"type": "object", "properties": {"chat_id": _CHAT_ID},
                         "required": ["chat_id"]},
-                requires_role=RequiresRole.READ_ONLY,
+                requires_role=RequiresRole.SIGNED_IN,
             ),
             Action(
                 id="settings_get",
