@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hc-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "A chat in homeCore: ask about the house and set up automations, using Claude"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
