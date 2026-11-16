@@ -5,76 +5,72 @@ from __future__ import annotations
 import time
 from datetime import UTC
 
-from mcp.server.fastmcp import FastMCP
-
 from ..server_state import client
 
 
-def register(mcp: FastMCP) -> None:
-    @mcp.tool()
-    async def system_health() -> dict:
-        """Return homeCore overall health: uptime, version, DB sizes,
-        plugin/device/rule counts. Use as a first check when investigating
-        a "why isn't X working?" question."""
-        return await client().system_status()
+async def system_health() -> dict:
+    """Return homeCore overall health: uptime, version, DB sizes,
+    plugin/device/rule counts. Use as a first check when investigating
+    a "why isn't X working?" question."""
+    return await client().system_status()
 
-    @mcp.tool()
-    async def broker_diagnose() -> dict:
-        """Cross-source check of the embedded MQTT broker's health.
 
-        Aggregates:
-          - core uptime (proxy for "broker process is up" — broker is
-            embedded, dies with core)
-          - per-plugin connection state (managed plugins should appear
-            with status=active and a recent heartbeat; offline ones
-            with stale heartbeats are the typical symptom of an MQTT
-            connectivity issue)
-          - count of plugins with stale heartbeat (>120s since last)
+async def broker_diagnose() -> dict:
+    """Cross-source check of the embedded MQTT broker's health.
 
-        Returns a structured report rather than a raw diagnostic dump
-        so a follow-up tool can drill into the specific offender (e.g.
-        `plugin_logs` for the listed stale plugin)."""
-        c = client()
-        status, plugins = await _gather(c)
+    Aggregates:
+      - core uptime (proxy for "broker process is up" — broker is
+        embedded, dies with core)
+      - per-plugin connection state (managed plugins should appear
+        with status=active and a recent heartbeat; offline ones
+        with stale heartbeats are the typical symptom of an MQTT
+        connectivity issue)
+      - count of plugins with stale heartbeat (>120s since last)
 
-        now = time.time()
-        stale_threshold_secs = 120
-        stale: list[dict] = []
-        active = 0
-        offline = 0
-        for p in plugins:
-            hb = p.get("last_heartbeat")
-            if hb is None:
-                hb_age = None
-            else:
-                hb_age = _seconds_since_iso(hb, now)
+    Returns a structured report rather than a raw diagnostic dump
+    so a follow-up tool can drill into the specific offender (e.g.
+    `plugin_logs` for the listed stale plugin)."""
+    c = client()
+    status, plugins = await _gather(c)
 
-            if p.get("status") == "active":
-                active += 1
-                if hb_age is not None and hb_age > stale_threshold_secs:
-                    stale.append(
-                        {
-                            "plugin_id": p.get("plugin_id"),
-                            "status": p.get("status"),
-                            "last_heartbeat_age_secs": int(hb_age),
-                        }
-                    )
-            else:
-                offline += 1
+    now = time.time()
+    stale_threshold_secs = 120
+    stale: list[dict] = []
+    active = 0
+    offline = 0
+    for p in plugins:
+        hb = p.get("last_heartbeat")
+        if hb is None:
+            hb_age = None
+        else:
+            hb_age = _seconds_since_iso(hb, now)
 
-        return {
-            "core_uptime_secs": status.get("uptime_seconds"),
-            "version": status.get("version"),
-            "plugins": {
-                "total": len(plugins),
-                "active": active,
-                "offline": offline,
-                "stale_heartbeat": stale,
-            },
-            "broker_likely_healthy": (
-                status.get("uptime_seconds", 0) > 0 and active > 0 and len(stale) == 0
-            ),
-        }
+        if p.get("status") == "active":
+            active += 1
+            if hb_age is not None and hb_age > stale_threshold_secs:
+                stale.append(
+                    {
+                        "plugin_id": p.get("plugin_id"),
+                        "status": p.get("status"),
+                        "last_heartbeat_age_secs": int(hb_age),
+                    }
+                )
+        else:
+            offline += 1
+
+    return {
+        "core_uptime_secs": status.get("uptime_seconds"),
+        "version": status.get("version"),
+        "plugins": {
+            "total": len(plugins),
+            "active": active,
+            "offline": offline,
+            "stale_heartbeat": stale,
+        },
+        "broker_likely_healthy": (
+            status.get("uptime_seconds", 0) > 0 and active > 0 and len(stale) == 0
+        ),
+    }
 
 
 async def _gather(c) -> tuple[dict, list[dict]]:

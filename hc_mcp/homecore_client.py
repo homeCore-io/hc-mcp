@@ -78,6 +78,20 @@ class HomeCoreClient:
     async def automation_history(self, rule_id: str, limit: int | None = None) -> list[dict]:
         return await self.get(f"/automations/{rule_id}/history", limit=limit)
 
+    async def list_scenes(self) -> list[dict]:
+        return await self.get("/scenes")
+
+    async def list_areas(self) -> list[dict]:
+        return await self.get("/areas")
+
+    async def activate_scene(self, scene_id: str) -> dict:
+        """POST /scenes/{id}/activate: run a scene."""
+        resp = await self._client.post(f"/scenes/{scene_id}/activate")
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "scene_id": scene_id}
+        return resp.json()
+
     async def list_events(
         self,
         limit: int = 50,

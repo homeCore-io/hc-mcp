@@ -10,6 +10,8 @@ Run with:
     HC_MCP_API_KEY=hc_sk_... hc-mcp   # env-var override
     hc-mcp setup                 # provision an API key against a homeCore
                                  #   instance and write the config file
+    hc-mcp plugin config.toml    # run as homeCore's Assistant plugin (the
+                                 #   in-app chat); see hc_mcp/plugin.py
 
 Register with Claude Desktop / Claude Code by adding an MCP server entry
 that runs `hc-mcp` (see README.md).
@@ -23,31 +25,14 @@ import sys
 from mcp.server.fastmcp import FastMCP
 
 from . import config as cfg_mod
-from . import server_state, setup_cli
+from . import registry, server_state, setup_cli
 from .homecore_client import HomeCoreClient
-from .tools import (
-    commands,
-    devices,
-    events,
-    plugin_actions,
-    plugins,
-    rules,
-    system,
-    troubleshooting,
-)
 
 
 def build_server(client: HomeCoreClient) -> FastMCP:
     mcp = FastMCP("hc-mcp")
     server_state.set_client(client)
-    system.register(mcp)
-    plugins.register(mcp)
-    devices.register(mcp)
-    rules.register(mcp)
-    events.register(mcp)
-    commands.register(mcp)
-    plugin_actions.register(mcp)
-    troubleshooting.register(mcp)
+    registry.register_mcp(mcp)
     return mcp
 
 
@@ -64,15 +49,26 @@ def main() -> None:
     subparsers = parser.add_subparsers(
         dest="subcommand",
         title="subcommands",
-        metavar="{setup}",
+        metavar="{setup,plugin}",
         # No default — when omitted, run the server.
     )
     setup_cli.add_subparser(subparsers)
+    plugin_parser = subparsers.add_parser(
+        "plugin",
+        help="Run as homeCore's Assistant plugin (the in-app chat).",
+        description="Run as homeCore's Assistant plugin. homeCore passes the config file.",
+    )
+    plugin_parser.add_argument("config", help="The plugin config file homeCore wrote")
 
     args = parser.parse_args()
 
     if args.subcommand == "setup":
         sys.exit(args.func(args))
+    if args.subcommand == "plugin":
+        from .plugin import main as plugin_main
+
+        plugin_main(args.config)
+        return
 
     # Default: run the MCP server.
     try:
