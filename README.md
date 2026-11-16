@@ -4,8 +4,9 @@ Model Context Protocol server for [homeCore](https://github.com/homeCore-io/home
 Exposes typed tools that an MCP-aware LLM client (Claude Desktop, Claude
 Code, etc.) can call to inspect a running homeCore instance.
 
-**Status:** Phase 1 — read-only troubleshooter. Roadmap and full tool
-inventory live in [`DESIGN.md`](DESIGN.md).
+**Status:** read and write tools for MCP clients, and (0.1.1) the same tools
+as the homeCore app's Assistant chat; see "The Assistant" below. Roadmap and
+full tool inventory live in [`DESIGN.md`](DESIGN.md).
 
 ## Tools
 
@@ -146,6 +147,62 @@ To smoke-test outside an MCP client:
 
 The server speaks MCP over stdio; you can drive it with the MCP
 inspector or any conformant client.
+
+## The Assistant: hc-mcp inside the homeCore app
+
+The same tools also run as a homeCore plugin, `plugin.mcp` ("Assistant"):
+an **Ask** button on every page of the app opens a chat with Claude about the
+house. Everyone signed in can chat; it never goes beyond what the person
+asking may do.
+
+```bash
+hc-mcp plugin /path/to/config.toml        # by hand
+python -m hc_mcp.plugin /path/to/config.toml   # how a Python runtime runs it
+```
+
+homeCore passes the config file (its `[homecore]` table: broker and plugin
+credentials), mints the plugin its own REST key on every start (the manifest's
+`api_scopes`; nothing to paste), and says who is asking with every action.
+The plugin needs `homecore-plugin-sdk` 0.5.5 or later.
+
+**Settings** (Settings > Plugins > Assistant, admins only): the Claude API key
+(from console.anthropic.com; stored by the plugin, never sent back to a
+browser), the model (Claude Sonnet 5.5 by default, Opus 5.5, Haiku 4.5), what
+it may do (control devices, make and change automations, locks, doors and
+security, ask before every change) and how long chats are kept (30 days, 7
+days, or not at all).
+
+**What it may do in chat** is the intersection of three things: the tool's
+category is switched on in the settings, the person asking holds the tool's
+homeCore scopes, and the plugin's own key does. Anything that changes the
+house shows a confirm card first (unless "Ask before every change" is off),
+and a device that counts for security needs "Locks, doors and security" too.
+
+**Where it keeps things**: `settings.json` and one folder of chats per
+person, in its data folder: `HC_MCP_DATA_DIR`, else `[assistant].data_dir`
+in the config, else (in a runtime) `.../plugins/plugin.mcp/data` so upgrades
+keep it, else `hc-mcp-data` beside the config. Chats never go to homeCore.
+
+**The screens** ship in `ui/` (plain custom elements, no build step):
+`hc-mcp-chat` (slot `app.assistant`) and `hc-mcp-settings` (slot
+`plugin.page`). The wheel carries them as `hc_mcp/ui`. What the chat action
+streams to them is in [`docs/chat-events.md`](docs/chat-events.md).
+
+### Releasing the plugin
+
+The runtime artifact builds with `hc-scripts/build-python-artifact.sh
+--plugin clients/hc-mcp --sdk sdks/hc-plugin-sdk-py` (checked locally:
+`plugin.mcp-0.1.1-python-cp312-manylinux_2_28-x86_64.tar.zst`, installs
+offline, finds its UI). Not done yet:
+
+- **Tag the SDK `v0.5.5` first.** `[tool.uv.sources]` takes the SDK from that
+  tag, so this repo's CI cannot install until it exists.
+- **No release workflow here yet.** One would call hc-scripts'
+  `python-release.yml` with `plugin_dir: .` and `sdk_ref: v0.5.5` (its
+  default SDK tag is older). Its install check,
+  `smoke-python-artifact.sh`, waits for the plugin to register a device, and
+  the Assistant has none, so that check needs to accept a published
+  capabilities manifest (or plugin status) before this can release through it.
 
 ## Current limitations
 

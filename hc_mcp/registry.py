@@ -1,0 +1,244 @@
+"""Every tool, once: what it is called, what it does, what it needs.
+
+The MCP server and the in-app chat both serve tools from this list, so a tool
+added here is a tool in both (unless it says otherwise with ``mcp`` / ``chat``).
+A tool's function is plain: keyword arguments in, JSON-able out, talking to
+homeCore through ``server_state.client()``. Its schema is derived from the
+function's signature the same way FastMCP derives it, so the two surfaces
+cannot disagree about arguments.
+
+Gating differs by surface and lives outside the functions:
+
+- MCP server: a write tool checks ``HC_MCP_ALLOW_WRITE`` (``permissions``),
+  as it always has.
+- Chat: a tool is offered only if its category is switched on in the
+  plugin's settings and the person asking holds its scopes (``for_chat``);
+  changes then go through the confirm step in ``chat.py``.
+"""
+
+from __future__ import annotations
+
+import functools
+import inspect
+from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass, field
+from typing import Any
+
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.tools import Tool as _FastTool
+
+from .permissions import ensure_write
+from .tools import (
+    commands,
+    devices,
+    events,
+    house,
+    plugin_actions,
+    plugins,
+    rules,
+    system,
+    troubleshooting,
+)
+
+#: Answers questions. Always on.
+READ = "read"
+#: Commands devices and runs scenes.
+DEVICE_COMMANDS = "device_commands"
+#: Makes, changes and deletes automations.
+RULE_MUTATIONS = "rule_mutations"
+#: Runs another plugin's actions.
+PLUGIN_ACTIONS = "plugin_actions"
+#: Devices that count for security. Not a tool category of its own: a device
+#: command or an automation that touches one needs this switched on as well.
+SECURITY = "security"
+
+CATEGORIES = (READ, DEVICE_COMMANDS, RULE_MUTATIONS, PLUGIN_ACTIONS, SECURITY)
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    fn: Callable[..., Awaitable[Any]]
+    category: str = READ
+    #: homeCore scopes the person asking must hold (chat).
+    scopes: tuple[str, ...] = ()
+    #: Only an admin may use it (homeCore checks the role, not a scope).
+    admin_only: bool = False
+    #: Served by the MCP server / offered in chat.
+    mcp: bool = True
+    chat: bool = True
+    #: The chip the chat shows once it ran ("Looked at 42 devices"), from the
+    #: arguments and the result.
+    step: Callable[[dict, Any], str] | None = None
+    #: What the chat shows while it runs.
+    running: str = "Looking"
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def mutates(self) -> bool:
+        return self.category != READ
+
+    @property
+    def description(self) -> str:
+        return inspect.getdoc(self.fn) or ""
+
+    @property
+    def chat_description(self) -> str:
+        """The description without the MCP server's environment-variable
+        gating note, which means nothing in chat."""
+        return self.description.split("Write-gated", 1)[0].rstrip()
+
+    @functools.cached_property
+    def input_schema(self) -> dict:
+        schema = dict(_FastTool.from_function(self.fn).parameters)
+        schema.pop("title", None)
+        props = {}
+        for name, prop in schema.get("properties", {}).items():
+            prop = {k: v for k, v in prop.items() if k != "title"}
+            props[name] = prop
+        schema["properties"] = props
+        return schema
+
+    def mcp_callable(self) -> Callable[..., Awaitable[Any]]:
+        if not self.mutates:
+            return self.fn
+
+        @functools.wraps(self.fn)
+        async def gated(*args: Any, **kwargs: Any) -> Any:
+            ensure_write(self.category)
+            return await self.fn(*args, **kwargs)
+
+        return gated
+
+
+def _count(noun: str, verb: str = "Looked at") -> Callable[[dict, Any], str]:
+    def label(_args: dict, result: Any) -> str:
+        n = len(result) if isinstance(result, list) else 0
+        return f"{verb} {n} {noun if n != 1 else noun.rstrip('s')}"
+
+    return label
+
+
+def _fixed(text: str) -> Callable[[dict, Any], str]:
+    return lambda _args, _result: text
+
+
+TOOLS: tuple[ToolSpec, ...] = (
+    # ── read ──────────────────────────────────────────────────────────────
+    ToolSpec("system_health", system.system_health, step=_fixed("Checked homeCore")),
+    ToolSpec("list_plugins", plugins.list_plugins, scopes=("plugins:read",),
+             step=_count("plugins")),
+    ToolSpec("plugin_status", plugins.plugin_status, scopes=("plugins:read",),
+             step=_fixed("Checked the plugin")),
+    ToolSpec("plugin_capabilities", plugins.plugin_capabilities, scopes=("plugins:read",),
+             step=_fixed("Read what the plugin can do")),
+    ToolSpec("list_devices", devices.list_devices, scopes=("devices:read",),
+             step=_count("devices"), running="Looking at devices"),
+    ToolSpec("device_state", devices.device_state, scopes=("devices:read",),
+             step=lambda _a, r: f"Checked {house.device_label(r) if isinstance(r, dict) else 'it'}"),
+    ToolSpec("device_history", devices.device_history, scopes=("devices:read",),
+             step=_fixed("Read its history")),
+    ToolSpec("list_rules", rules.list_rules, scopes=("automations:read",),
+             step=_count("automations")),
+    ToolSpec("get_rule", rules.get_rule, scopes=("automations:read",),
+             step=lambda _a, r: f"Read {r.get('name') if isinstance(r, dict) else 'it'}"),
+    ToolSpec("rule_test", rules.rule_test, scopes=("automations:read",),
+             step=_fixed("Tried it against the house now")),
+    ToolSpec("rule_firings", rules.rule_firings, scopes=("automations:read",),
+             step=_fixed("Checked what ran")),
+    ToolSpec("recent_events", events.recent_events, scopes=("devices:read",),
+             step=_fixed("Read recent events")),
+    ToolSpec("correlation_trace", events.correlation_trace, scopes=("devices:read",),
+             step=_fixed("Followed what happened")),
+    ToolSpec("core_logs", troubleshooting.core_logs, admin_only=True, chat=False,
+             step=_fixed("Read homeCore's log")),
+    ToolSpec("plugin_logs", troubleshooting.plugin_logs, admin_only=True, chat=False,
+             step=_fixed("Read the plugin's log")),
+    ToolSpec("find_recent_errors", troubleshooting.find_recent_errors, admin_only=True, chat=False,
+             step=_fixed("Looked for errors")),
+    ToolSpec("broker_diagnose", system.broker_diagnose, scopes=("plugins:read",),
+             step=_fixed("Checked the plugins' connections")),
+    ToolSpec("list_plugin_actions", plugin_actions.list_plugin_actions,
+             scopes=("plugins:read",), step=_count("plugin actions", "Found")),
+    # The log tools stay out of chat: homeCore serves logs to admins only,
+    # and the plugin's own key is never an admin's.
+    # Chat only: the household's own words, and the two screen tools.
+    ToolSpec("list_scenes", house.list_scenes, scopes=("scenes:read",), mcp=False,
+             step=_count("scenes")),
+    ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",), mcp=False,
+             step=_count("rooms")),
+    ToolSpec("show_devices", house.show_devices, scopes=("devices:read",), mcp=False),
+    ToolSpec("suggest_replies", house.suggest_replies, mcp=False),
+    # ── device commands ───────────────────────────────────────────────────
+    ToolSpec("command_device", commands.command_device, DEVICE_COMMANDS,
+             scopes=("devices:command",), step=_fixed("Sent the command")),
+    ToolSpec("bulk_command", commands.bulk_command, DEVICE_COMMANDS,
+             scopes=("devices:command",),
+             step=lambda _a, r: f"Sent {r.get('succeeded', 0)} commands"
+             if isinstance(r, dict) else "Sent the commands"),
+    ToolSpec("run_scene", house.run_scene, DEVICE_COMMANDS, scopes=("scenes:run",),
+             mcp=False, step=_fixed("Ran the scene")),
+    # ── automations ───────────────────────────────────────────────────────
+    ToolSpec("create_rule", rules.create_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Saved the automation")),
+    ToolSpec("update_rule", rules.update_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Saved the changes")),
+    ToolSpec("delete_rule", rules.delete_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Deleted the automation")),
+    ToolSpec("enable_rule", rules.enable_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Turned the automation on")),
+    ToolSpec("disable_rule", rules.disable_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Turned the automation off")),
+    # ── other plugins' actions ────────────────────────────────────────────
+    ToolSpec("invoke_plugin_action", plugin_actions.invoke_plugin_action, PLUGIN_ACTIONS,
+             scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
+    ToolSpec("await_streaming_plugin_action", plugin_actions.await_streaming_plugin_action,
+             PLUGIN_ACTIONS, scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
+)  # fmt: skip
+
+BY_NAME = {t.name: t for t in TOOLS}
+
+
+def register_mcp(mcp: FastMCP) -> None:
+    """Attach every MCP tool to *mcp*, under the names it has always had."""
+    for spec in TOOLS:
+        if spec.mcp:
+            mcp.add_tool(spec.mcp_callable(), name=spec.name, description=spec.description)
+
+
+def allowed_in_chat(
+    spec: ToolSpec,
+    *,
+    scopes: Iterable[str],
+    role: str | None,
+    enabled: Iterable[str],
+) -> bool:
+    """Whether the chat may offer *spec* to someone holding *scopes* in
+    *role*, with the categories in *enabled* switched on."""
+    if not spec.chat:
+        return False
+    if spec.admin_only and role != "admin":
+        return False
+    if spec.category != READ and spec.category not in set(enabled):
+        return False
+    held = set(scopes)
+    return all(s in held for s in spec.scopes)
+
+
+def for_chat(
+    *,
+    scopes: Iterable[str],
+    role: str | None,
+    enabled: Iterable[str],
+    key_scopes: Iterable[str] | None = None,
+) -> list[ToolSpec]:
+    """The tools the chat offers this person.
+
+    *key_scopes* are what homeCore granted the plugin's own key; a tool that
+    needs more than that would only fail, so it is left out too.
+    """
+    scopes = set(scopes)
+    if key_scopes is not None:
+        scopes &= set(key_scopes)
+    enabled = set(enabled)
+    return [t for t in TOOLS if allowed_in_chat(t, scopes=scopes, role=role, enabled=enabled)]

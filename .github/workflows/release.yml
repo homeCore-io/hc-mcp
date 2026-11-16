@@ -1,0 +1,24 @@
+# Tag `v<version>` to release the Assistant (plugin.mcp) as a homeCore plugin.
+#
+# The build and the release gate live in hc-scripts: a hermetic artifact (the
+# plugin, the SDK and every dependency as wheels) that is installed offline
+# into a clean venv and has to start against a broker before anything is
+# published.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: homeCore-io/hc-scripts/.github/workflows/python-release.yml@main
+    with:
+      plugin_dir: .
+      # The Assistant needs caller and api_access, which arrived in 0.5.5.
+      sdk_ref: v0.5.5
+    secrets: inherit

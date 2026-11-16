@@ -78,6 +78,20 @@ class HomeCoreClient:
     async def automation_history(self, rule_id: str, limit: int | None = None) -> list[dict]:
         return await self.get(f"/automations/{rule_id}/history", limit=limit)
 
+    async def list_scenes(self) -> list[dict]:
+        return await self.get("/scenes")
+
+    async def list_areas(self) -> list[dict]:
+        return await self.get("/areas")
+
+    async def activate_scene(self, scene_id: str) -> dict:
+        """POST /scenes/{id}/activate: run a scene."""
+        resp = await self._client.post(f"/scenes/{scene_id}/activate")
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True, "scene_id": scene_id}
+        return resp.json()
+
     async def list_events(
         self,
         limit: int = 50,
@@ -186,9 +200,9 @@ class HomeCoreClient:
     async def command_device(self, device_id: str, command: dict) -> dict:
         """PATCH /devices/{id}/state — issue a command to a device.
 
-        Body shape is plugin-specific; typically `{"action": "set",
-        "<attr>": <value>, ...}`. The plugin's capability schema lists
-        valid attributes for each device.
+        Body is an attribute write (`{"<attr>": <value>, ...}`) or a
+        declared action (`{"action": "<name>", ...params}`). The device's
+        schema lists its writable attributes and actions.
         """
         resp = await self._client.patch(f"/devices/{device_id}/state", json=command)
         resp.raise_for_status()
