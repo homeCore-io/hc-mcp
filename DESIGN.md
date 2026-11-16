@@ -13,6 +13,48 @@ review before resuming).
 
 ---
 
+## The Assistant (0.2.0): the same tools as a chat in the app
+
+hc-mcp also runs as a homeCore plugin, `plugin.mcp`, behind an "Ask" button in
+the app. The pieces:
+
+- **One registry** (`hc_mcp/registry.py`). Every tool is a plain async
+  function in `hc_mcp/tools/`, listed once with its category (`read`,
+  `device_commands`, `rule_mutations`, `plugin_actions`; `security` gates
+  devices rather than tools), the homeCore scopes it needs, and the chip the
+  chat shows once it ran. The MCP server registers from it under the same names
+  and schemas as before, gated by `HC_MCP_ALLOW_WRITE` as before. A few tools
+  are chat only (`list_scenes`, `run_scene`, `list_rooms`, and the screen tools
+  `show_devices` and `suggest_replies`); the log tools are MCP only, since
+  homeCore serves logs to admins and the plugin's key is never one.
+- **The chat loop** (`hc_mcp/chat.py`) asks the model, runs the tools it calls,
+  and asks again, at most 12 rounds. The model sees only the tools whose
+  category is on in the settings and whose scopes the person asking holds (and
+  the plugin's key holds). Changes go through a confirm card when "Ask before
+  every change" is on; a device that counts for security (its `security`
+  choice, else its type: locks, doors, windows, covers) needs "Locks, doors and
+  security" as well, checked for device commands, scenes and automations.
+- **A small provider interface** (`hc_mcp/provider.py`): reply (streaming text,
+  returning content, tool calls and why it stopped), the two message shapes,
+  and a key check. Only the Claude API is built (`anthropic` 2.x, Messages API
+  with tool use, streamed). An OpenAI-compatible or local endpoint would be one
+  more class.
+- **The plugin** (`hc_mcp/plugin.py`): declares `api_scopes`, the streaming
+  `chat` action (`requires_role: user`, many at once, cancelable) and the
+  immediate ones the screens use; keeps settings and each person's chats in its
+  own data folder. A missing key, an API failure, or REST access that has not
+  arrived never stops it: it logs, raises a notice, and the chat says so.
+- **The screens** (`ui/`): `hc-mcp-chat` (slot `app.assistant`) and
+  `hc-mcp-settings` (slot `plugin.page`), built to the approved mockups in the
+  app's own colors. The stream between them is documented in
+  [`docs/chat-events.md`](docs/chat-events.md).
+
+What the chat cannot know: the words on an automation's confirm card are the
+model's own description (`explain`), shown beside the exact rule; homeCore's
+rule JSON has no plain-language renderer the plugin could use instead.
+
+---
+
 ## What MCP means here
 
 An MCP server exposes typed tools to Claude (or any LLM client). Each tool is

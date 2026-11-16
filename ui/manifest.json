@@ -1,0 +1,8 @@
+{
+	"host_api": 1,
+	"entry": "index.js",
+	"slots": [
+		{ "slot": "app.assistant", "element": "hc-mcp-chat", "label": "Ask" },
+		{ "slot": "plugin.page", "element": "hc-mcp-settings" }
+	]
+}
