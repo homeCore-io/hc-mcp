@@ -700,6 +700,7 @@ class McpSettings extends HTMLElement {
 	#s = null;
 	#error = '';
 	#replacing = false;
+	#accessTimer = undefined;
 	#said = { key: '', test: '', save: '' };
 
 	constructor() {
@@ -734,6 +735,30 @@ class McpSettings extends HTMLElement {
 			this.#error = '';
 		}
 		this.#draw();
+		this.#awaitAccess();
+	}
+
+	/** Until homeCore has given the assistant its access, ask again now and then. */
+	#awaitAccess() {
+		clearTimeout(this.#accessTimer);
+		if (!this.#s || this.#s.rest_access?.ready) return;
+		this.#accessTimer = setTimeout(async () => {
+			if (!this.isConnected) return;
+			const res = await this.#host.action('settings_get');
+			if (res.ok && res.data.ok !== false && res.data.rest_access?.ready) {
+				this.#s = { ...this.#s, rest_access: res.data.rest_access };
+				const line = this.shadowRoot.querySelector('.sub .wait');
+				// Only the status line: someone may be halfway through typing a key.
+				if (line) line.outerHTML = '<span class="ok">Connected to homeCore</span>';
+				else this.#draw();
+				return;
+			}
+			this.#awaitAccess();
+		}, 3000);
+	}
+
+	disconnectedCallback() {
+		clearTimeout(this.#accessTimer);
 	}
 
 	async #save(changes, what = 'save') {
