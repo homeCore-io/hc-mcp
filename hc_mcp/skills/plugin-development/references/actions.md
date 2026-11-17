@@ -142,12 +142,13 @@ Where each SDK puts it:
 
 | SDK | Immediate | Streaming |
 |---|---|---|
-| Rust | `cmd["caller"]` in the custom or async handler | `params["caller"]` |
+| Rust | `Caller::from_cmd(cmd)` in the custom or async handler | `ctx.caller()` |
 | Python | `caller=` keyword of `on_action` | `ctx.caller` |
 | JavaScript | fourth argument of `onAction` | `ctx.caller` (and the fourth argument) |
 | .NET | fourth argument of `OnActionWithCaller` | `ctx.Caller` (and the fourth argument) |
 
-The Python, JavaScript and .NET SDKs remove `caller` from `params`.
+Every SDK removes `caller` from a streaming action's `params` (Rust since
+0.6.5).
 
 ## The plugin's own REST access: `api_scopes` and `api_access`
 
@@ -173,10 +174,11 @@ plugin an API key with those scopes and sends it as the management action
 - The key shows in the API keys list as `plugin <id>`, and in the audit log
   as `api_key:plugin <id>`.
 
-Python, JavaScript and .NET answer `api_access` for you and keep the access
-(`api_access` / `apiAccess` / `ApiAccess`, with a wait helper and a hook).
-**Rust does not**: handle `"api_access"` in `with_custom_handler`, store
-`cmd["url"]` and `cmd["key"]`, and reply `{"status": "ok"}`.
+Every SDK answers `api_access` for you and keeps the access (Rust
+`mgmt.api_access()` since 0.6.5, Python `api_access`, JavaScript
+`apiAccess`, .NET `ApiAccess`), with a wait helper and a hook. In Rust, a
+custom handler that still answers `api_access` keeps working: the SDK keeps
+the grant first, and that handler's reply is what core gets.
 
 ## Files sent to an action (Rust only)
 

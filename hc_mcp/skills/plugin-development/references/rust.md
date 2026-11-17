@@ -1,7 +1,7 @@
 # Rust plugins
 
 Read this when the plugin is in Rust. The SDK is the crate `plugin-sdk-rs`
-(0.6.4 at the time of writing). It lives at `sdk/rust` in the
+(0.6.5 at the time of writing). It lives at `sdk/rust` in the
 [homeCore repository](https://github.com/homeCore-io/homeCore), and every
 first-party Rust plugin lives beside it at `plugins/hc-<name>` as a workspace
 member. Its README is the API reference; this page is the working minimum.
@@ -54,7 +54,7 @@ pattern.
 
 One lamp: an immediate `signed_in` action that reads `caller`, an admin
 streaming action, REST access, an alert kind, a stop handler and its own
-screens. It compiles against SDK 0.6.4 and passes its conformance test.
+screens. It compiles against SDK 0.6.5 and passes its conformance test.
 
 `config/config.toml.example`:
 
@@ -70,7 +70,6 @@ password    = ""
 
 ```rust
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use plugin_sdk_rs::device_actions::{with_actions, Action as DeviceAction};
@@ -80,7 +79,7 @@ use plugin_sdk_rs::types::schema::{
 use plugin_sdk_rs::types::{
     Action, AlertSeverity, Capabilities, Concurrency, PluginAlert, PluginAlertKind, RequiresRole,
 };
-use plugin_sdk_rs::{PluginClient, PluginConfig, StreamingAction};
+use plugin_sdk_rs::{Caller, PluginClient, PluginConfig, StreamingAction};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -106,13 +105,6 @@ fn localhost() -> String {
 }
 fn mqtt_port() -> u16 {
     1883
-}
-
-/// What the plugin was given to call homeCore's REST API (`api_access`).
-#[derive(Clone, Default)]
-struct Rest {
-    url: String,
-    key: String,
 }
 
 #[tokio::main]
@@ -146,11 +138,6 @@ async fn run(config_path: &str) -> Result<()> {
     let publisher = client.device_publisher();
     let notices = client.notices();
 
-    // Kept in memory only; a new key arrives on every start. Call the REST
-    // API at `url` with `Authorization: Bearer <key>`.
-    let rest: Arc<Mutex<Rest>> = Arc::default();
-    let rest_in = rest.clone();
-
     let mut mgmt = client
         .enable_management(
             60,
@@ -167,23 +154,21 @@ async fn run(config_path: &str) -> Result<()> {
             severity: AlertSeverity::Warning,
             default_on: true,
         }])
+        // The SDK answers api_access and keeps the grant; this hook hears
+        // each new key (one per start). Read it later with
+        // `mgmt.api_access()` and call `{url}/...` with
+        // `Authorization: Bearer {key}`.
+        .with_api_access_handler(|access| {
+            info!(url = %access.url, scopes = access.scopes.len(), "REST access");
+        })
         .with_custom_handler(move |cmd| match cmd["action"].as_str()? {
-            // Rust answers api_access itself. Reply ok, or core deletes the key.
-            "api_access" => {
-                let mut r = rest_in.lock().unwrap();
-                r.url = cmd["url"].as_str().unwrap_or_default().into();
-                r.key = cmd["key"].as_str().unwrap_or_default().into();
-                Some(json!({ "status": "ok" }))
-            }
             // A signed_in action: core verified `caller`, so judge by its scopes.
             "whoami" => {
-                let caller = &cmd["caller"];
+                let caller = Caller::from_cmd(cmd).unwrap_or_default();
                 Some(json!({
                     "status": "ok",
-                    "username": caller["username"],
-                    "can_command": caller["scopes"]
-                        .as_array()
-                        .is_some_and(|s| s.iter().any(|v| v == "devices:command")),
+                    "username": caller.username,
+                    "can_command": caller.has_scope("devices:command"),
                 }))
             }
             _ => None,
@@ -380,12 +365,16 @@ What to notice:
   nowhere.
 - Commands arrive on a synchronous callback. Hand them to a channel so slow
   device I/O never stalls the MQTT loop.
-- `api_access` reaches the custom handler in Rust (the other SDKs handle it
-  for you). Reply `{"status": "ok"}`; an error or no answer makes core delete
-  the key.
+- The SDK answers `api_access` itself (since 0.6.5) and keeps the grant:
+  `mgmt.api_access()`, `mgmt.wait_for_api_access(timeout)` (on a task of its
+  own, once `run_managed` is running), `mgmt.api_access_updates()`, and the
+  hook `with_api_access_handler`. Clone the handle before `run_managed`
+  takes it; every clone sees the same grant. A custom handler that still
+  answers `api_access` keeps working, and its reply is what core gets.
 - In the custom handler, `cmd` is the whole management message: the action's
-  params and `caller` sit at its top level. A streaming handler's `params` is
-  the same message without `action` and `request_id`.
+  params and `caller` sit at its top level (`Caller::from_cmd(cmd)` reads
+  it). A streaming handler's `params` is the same message without `action`,
+  `request_id` and `caller`; it reads the caller with `ctx.caller()`.
 - When the event loop ends, `run` returns an error and `main` exits 1.
 
 ## The SDK's names
@@ -405,10 +394,10 @@ What to notice:
 | Capability manifest | `.with_capabilities(Capabilities { spec: "1", plugin_id: "" (SDK fills it), actions, api_scopes })` |
 | Immediate action | `.with_custom_handler(\|cmd\| -> Option<Value>)` (must not block) or `.with_async_handler(\|cmd\| -> Option<AsyncActionFuture>)` for one that talks to a device |
 | Streaming action | `.with_streaming_action(StreamingAction::new(id, \|ctx, params\| async move { ... }))` |
-| Stages | `ctx.progress(percent, label, message)`, `item_add` / `item_update` / `item_remove`, `warning`, `awaiting_user` / `awaiting_user_with_schema` then `await_respond`, `complete`, `error`, `canceled`; `is_canceled()`, `wait_canceled()` |
-| Roles | `RequiresRole::{Admin, User, ReadOnly, SignedIn}` |
-| Caller | `cmd["caller"]` (custom and async handlers), `params["caller"]` (streaming) |
-| REST access | `api_scopes` on `Capabilities`; answer `api_access` (`cmd["url"]`, `cmd["key"]`, `cmd["scopes"]`) yourself |
+| Stages | `ctx.progress(percent, label, message)`, `progress_with_data(.., data)`, `item_add` / `item_update` / `item_remove`, `warning(message, data)`, `awaiting_user` / `awaiting_user_with_schema` / `awaiting_user_with_data` then `await_respond`, `complete`, `error`, `canceled`; `is_canceled()`, `wait_canceled()`. Each event's `ts` is later than the last |
+| Roles | `RequiresRole::{Admin, User, ReadOnly, SignedIn}`; `device_actions::Role::SignedIn` on a device action |
+| Caller | `Caller::from_cmd(cmd)` (custom and async handlers), `ctx.caller()` (streaming); `caller.has_scope(..)` |
+| REST access | `api_scopes` on `Capabilities`; automatic: `mgmt.api_access()` (`ApiAccess { url, key, scopes }`, its `Debug` hides the key), `wait_for_api_access(timeout)`, `api_access_updates()`, hook `with_api_access_handler` |
 | Settings | `.with_config_schema(schema)` (derive with `schemars`), `.with_config_descriptor(config_descriptor::Descriptor ... .build())`; coverage test `config_descriptor::missing_schema_coverage` |
 | Notices | `notices.raise(PluginNotice::warning(code, msg).with_remedy(..))`, `notices.clear(code)` |
 | Alerts | `.with_alert_kinds([PluginAlertKind { .. }])`; `publisher.set_alerts(id, &[PluginAlert::new(topic, reason).key(..).action(..)])`; `set_plugin_alerts` |

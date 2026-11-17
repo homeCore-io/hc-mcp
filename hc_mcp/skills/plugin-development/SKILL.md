@@ -142,8 +142,8 @@ and one terminal `complete` or `error` (or `canceled`).
   their `scopes` allow.
 - A manifest with `api_scopes` gets the plugin its own API key on every
   start, sent as the `api_access` management action (`url`, `key`,
-  `scopes`). Python, JavaScript and .NET answer it for you; in Rust, answer
-  it in the custom handler or core deletes the key.
+  `scopes`). Every SDK answers it for you and keeps the grant (Rust from
+  SDK 0.6.5).
 - Always set `timeout_ms`. Core's default is 5 seconds.
 
 Details, stage rules, and where each SDK puts `caller`:
