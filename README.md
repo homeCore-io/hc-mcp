@@ -64,6 +64,19 @@ aggregated result. Tools work universally regardless of how homeCore
 was installed (local, docker, remote) — they all go through the REST
 API.
 
+## Skills: how-to guides
+
+hc-mcp ships homeCore's skills from
+[homeCore-io/skills](https://github.com/homeCore-io/skills):
+`dev-environment`, `install-and-setup` and `plugin-development`. An MCP client
+sees each as a prompt (start a conversation with it), can read every file as a
+`homecore-skill://<skill>/<file>` resource, and has two tools, `list_skills`
+and `read_skill`. The Assistant knows the skills by name and reads one when
+someone asks how to do something.
+
+The copy lives in `hc_mcp/skills`. After the skills repo changes, refresh it
+with `scripts/sync-skills.sh` (it reads `../../skills`, or a path you give it).
+
 ## Install
 
 ```bash

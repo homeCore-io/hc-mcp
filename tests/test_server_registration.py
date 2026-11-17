@@ -36,6 +36,8 @@ EXPECTED = {
     "find_recent_errors",
     "correlation_trace",
     "broker_diagnose",
+    "list_skills",
+    "read_skill",
     # write — gated by permissions.ensure_write
     "command_device",
     "bulk_command",

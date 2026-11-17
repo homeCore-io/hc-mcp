@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 import jsonschema
 
-from . import registry
+from . import guides, registry
 from .chats import Chat
 from .provider import MAX_TOKENS, REFUSAL, Canceled, Provider, ProviderError, ToolCall
 from .registry import ToolSpec
@@ -184,6 +184,18 @@ def system_prompt(
             "unless they ask."
         ),
     ]
+    if "read_skill" in offered and guides.skills():
+        lines += [
+            "",
+            (
+                "For how-to questions (installing or upgrading homeCore, settings, adding plugins, "
+                "plugin runtimes or users, a development setup, writing a plugin), read the guide "
+                "that covers it with read_skill before answering, and follow it. Name the screen "
+                "in the app that does each step. Adding plugins, changing users and anything about "
+                "security is for an admin: say so if the person isn't one. The guides:"
+            ),
+            *(f"- {s.name}: {s.description}" for s in guides.skills()),
+        ]
     if cannot:
         lines += [
             "",

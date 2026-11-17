@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hc-mcp"
-version = "0.1.2"
+version = "0.1.3"
 description = "A chat in homeCore: ask about the house and set up automations, using Claude"
 readme = "README.md"
 license = { text = "MIT OR Apache-2.0" }
@@ -64,6 +64,8 @@ category = "Tools"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The skills are a copy of homeCore-io/skills; their code samples are formatted there.
+extend-exclude = ["hc_mcp/skills"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
