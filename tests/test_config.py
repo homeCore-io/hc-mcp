@@ -68,7 +68,7 @@ def test_missing_api_key_is_a_named_error(monkeypatch):
     msg = str(e.value)
     assert "HC_MCP_API_KEY" in msg
     # The error should say how to mint one, not just that it is absent.
-    assert "api-key issue" in msg
+    assert "hc-mcp setup" in msg and "api-key create" in msg
 
 
 def test_defaults_when_only_a_key_is_supplied(monkeypatch):

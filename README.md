@@ -96,11 +96,11 @@ homeCore and writes the config file at `~/.config/hc-mcp/config.toml`
 ```bash
 # Option A — already have an admin JWT (e.g. from the admin UI's
 #            "API tokens" panel):
-hc-mcp setup --base-url http://10.0.10.20:8080 \
+hc-mcp setup --base-url http://192.168.1.10:8080 \
              --admin-token "$ADMIN_JWT"
 
 # Option B — log in via /auth/login first:
-hc-mcp setup --base-url http://10.0.10.20:8080 \
+hc-mcp setup --base-url http://192.168.1.10:8080 \
              --username admin
 # (password prompted on stdin)
 
@@ -133,7 +133,7 @@ api_key  = "hc_sk_…"        # from the admin UI or a prior setup run
 
 ### Claude Code
 
-Add to `~/.claude.json` (or per-project `.claude/settings.json`):
+Add to `~/.claude.json` (or a project's `.mcp.json`):
 
 ```json
 {
@@ -219,8 +219,7 @@ clients/hc-mcp --sdk sdks/hc-plugin-sdk-py`.
   machine can connect over Tailscale) lands in a follow-up.
 - **No install-aware substrate.** Tools that would need direct host
   access (journalctl, `docker logs`, config-file reads, service
-  restarts) are not yet implemented. The substrate-aware design is
-  parked at `claude-notes/plans/hc_mcp_install_aware.md` (DEFERRED).
+  restarts) are not yet implemented.
 - **No live MQTT tap.** `mqtt_tap` needs a persistent MQTT client;
   deferred to Phase 4.
 
