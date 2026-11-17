@@ -92,7 +92,7 @@ The runtime reaches homeCore's broker over the network. If **Plugin runtimes** s
 
 ### Install into it
 
-Install the Python plugin from the Catalog as usual. With one suitable runtime it goes there; with several the Catalog asks "More than one runtime can run it. Which one?" and the button reads **Run it on <runtime>**. The runtime installs and starts it the next time it checks in, usually within a minute, and the Catalog opens the plugin once it is running. Its settings are edited in homeCore like any plugin's.
+Install the Python plugin from the Catalog as usual. With one suitable runtime it goes there; with several the Catalog asks "More than one runtime can run it. Which one?" and the button reads **Run it on <runtime>**. The runtime installs and starts it within seconds (homeCore 0.1.114 and runtime 0.2.2; an older pair waits for the next check-in, up to half a minute), and the Catalog opens the plugin once it is running. Its settings are edited in homeCore like any plugin's.
 
 ### Runtime container settings
 
@@ -102,7 +102,7 @@ Install the Python plugin from the Catalog as usual. With one suitable runtime i
 | `HC_RUNTIME_PAGE_PORT` | `8790` | The runtime's page; `0` turns it off |
 | `HC_RUNTIME_PAGE_URL` | unset | The page's address, for the link in homeCore when the runtime is on another machine or port |
 | `HC_RUNTIME_BROKER_HOST` | unset | The broker's address when it differs from the host in the key |
-| `HC_RUNTIME_POLL_SECS` | `30` | How often it checks in |
+| `HC_RUNTIME_POLL_SECS` | `30` | How often it checks in. With homeCore 0.1.114 and runtime 0.2.2 it also checks in at once when a plugin is installed, updated or uninstalled there |
 | `HC_RUNTIME_NETWORK_MODE` | unset | Shown in homeCore's list (`bridge`, `host`) |
 
 The volume at `/var/lib/hc-runtime` holds the key and installed plugins. Losing it only means pasting the key again; homeCore sends the plugins back.
