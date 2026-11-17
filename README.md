@@ -203,19 +203,15 @@ streams to them is in [`docs/chat-events.md`](docs/chat-events.md).
 
 ### Releasing the plugin
 
-The runtime artifact builds with `hc-scripts/build-python-artifact.sh
---plugin clients/hc-mcp --sdk sdks/hc-plugin-sdk-py` (checked locally:
-`plugin.mcp-0.1.1-python-cp312-manylinux_2_28-x86_64.tar.zst`, installs
-offline, finds its UI). Not done yet:
+Bump the version in `pyproject.toml` and `hc_mcp/__init__.py`, merge to
+`main` and tag `v<version>`. `.github/workflows/release.yml` calls hc-scripts'
+`python-release.yml`, which builds the runtime artifact (the plugin, the SDK
+and every dependency as wheels, for x86_64 and aarch64), installs it offline
+and starts it against a broker, then publishes the release and lists it in the
+registry, where the Catalog finds it.
 
-- **Tag the SDK `v0.5.5` first.** `[tool.uv.sources]` takes the SDK from that
-  tag, so this repo's CI cannot install until it exists.
-- **No release workflow here yet.** One would call hc-scripts'
-  `python-release.yml` with `plugin_dir: .` and `sdk_ref: v0.5.5` (its
-  default SDK tag is older). Its install check,
-  `smoke-python-artifact.sh`, waits for the plugin to register a device, and
-  the Assistant has none, so that check needs to accept a published
-  capabilities manifest (or plugin status) before this can release through it.
+To build the artifact by hand: `hc-scripts/build-python-artifact.sh --plugin
+clients/hc-mcp --sdk sdks/hc-plugin-sdk-py`.
 
 ## Current limitations
 
