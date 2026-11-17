@@ -38,7 +38,7 @@ whole workspace together.
 **`[broker] is bound to 0.0.0.0 (non-loopback) with no [[broker.clients]]
 credentials configured`.** Core found no config, or a config with no
 `[broker]` section, and refuses to run an anonymous broker on the LAN.
-Check the config path in the first two lines of output (`HomeCore config
+Check the config path in the first two lines of output (`homeCore config
 file: ...`), then add:
 
 ```toml
@@ -55,8 +55,8 @@ defaults to 1884, so set it too.
 **API port in use.** Change `[server] port`.
 
 **Core loaded the wrong config or started plugins you did not declare.**
-Read the first two lines of output: `HomeCore base directory` and
-`HomeCore config file`. Resolution order is `--home`, then
+Read the first two lines of output: `homeCore base directory` and
+`homeCore config file`. Resolution order is `--home`, then
 `HOMECORE_HOME`, then the current directory; and `--config`, then
 `HOMECORE_CONFIG`, then `<home>/config/homecore.toml`. Run
 `env | grep ^HOMECORE_` and pass both flags explicitly. Running from
