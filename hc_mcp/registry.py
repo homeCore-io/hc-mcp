@@ -25,8 +25,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.prompts import Prompt
+from mcp.server.fastmcp.resources import TextResource
 from mcp.server.fastmcp.tools import Tool as _FastTool
 
+from . import guides
 from .permissions import ensure_write
 from .tools import (
     commands,
@@ -36,6 +39,7 @@ from .tools import (
     plugin_actions,
     plugins,
     rules,
+    skills,
     system,
     troubleshooting,
 )
@@ -160,6 +164,10 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_fixed("Checked the plugins' connections")),
     ToolSpec("list_plugin_actions", plugin_actions.list_plugin_actions,
              scopes=("plugins:read",), step=_count("plugin actions", "Found")),
+    # How-to guides. The chat names them in its instructions, so it only reads.
+    ToolSpec("list_skills", skills.list_skills, chat=False, step=_count("guides", "Found")),
+    ToolSpec("read_skill", skills.read_skill, step=_fixed("Read the guide"),
+             running="Reading the guide"),
     # The log tools stay out of chat: homeCore serves logs to admins only,
     # and the plugin's own key is never an admin's.
     # Chat only: the household's own words, and the two screen tools.
@@ -200,10 +208,40 @@ BY_NAME = {t.name: t for t in TOOLS}
 
 
 def register_mcp(mcp: FastMCP) -> None:
-    """Attach every MCP tool to *mcp*, under the names it has always had."""
+    """Attach every MCP tool to *mcp*, under the names it has always had,
+    and the skills as prompts and resources."""
     for spec in TOOLS:
         if spec.mcp:
             mcp.add_tool(spec.mcp_callable(), name=spec.name, description=spec.description)
+    register_skills(mcp)
+
+
+def _skill_prompt(name: str) -> Callable[[], str]:
+    def prompt() -> str:
+        return guides.body(name)
+
+    return prompt
+
+
+def register_skills(mcp: FastMCP) -> None:
+    """Each skill as a prompt (its SKILL.md, to start a conversation with)
+    and each of its files as a resource (homecore-skill://<skill>/<file>)."""
+    for skill in guides.skills():
+        mcp.add_prompt(
+            Prompt.from_function(
+                _skill_prompt(skill.name), name=skill.name, description=skill.description
+            )
+        )
+        for file in skill.files:
+            mcp.add_resource(
+                TextResource(
+                    uri=guides.uri(skill.name, file),
+                    name=f"{skill.name}/{file}",
+                    description=skill.description if file == "SKILL.md" else None,
+                    mime_type="text/markdown",
+                    text=guides.read(skill.name, file),
+                )
+            )
 
 
 def allowed_in_chat(

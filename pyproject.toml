@@ -64,6 +64,8 @@ category = "Tools"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The skills are a copy of homeCore-io/skills; their code samples are formatted there.
+extend-exclude = ["hc_mcp/skills"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
