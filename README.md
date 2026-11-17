@@ -176,7 +176,7 @@ python -m hc_mcp.plugin /path/to/config.toml   # how a Python runtime runs it
 homeCore passes the config file (its `[homecore]` table: broker and plugin
 credentials), mints the plugin its own REST key on every start (the manifest's
 `api_scopes`; nothing to paste), and says who is asking with every action.
-The plugin needs `homecore-plugin-sdk` 0.5.5 or later.
+The plugin needs `homecore-plugin-sdk` 0.5.6 or later.
 
 **Settings** (Settings > Plugins > Assistant, admins only): the Claude API key
 (from console.anthropic.com; stored by the plugin, never sent back to a
