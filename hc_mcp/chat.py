@@ -605,6 +605,28 @@ class Turn:
             if danger:
                 go["danger"] = True
             return {"type": "plain", "title": f"{verb} {name}"}, [cancel, go]
+        plain = {
+            "acknowledge_alert": ("Acknowledge the alert", "Acknowledge"),
+            "resume_rule": ("Resume the paused automation", "Resume it"),
+            "room_lights": (
+                f"Turn the room's lights {'on' if args.get('on') else 'off'}",
+                "Do it",
+            ),
+            "plugin_control": (
+                f"{str(args.get('op', 'restart')).capitalize()} {args.get('plugin_id', 'the plugin')}",
+                str(args.get("op", "restart")).capitalize(),
+            ),
+            "set_plugin_log_level": (
+                f"Set {args.get('plugin_id', 'the plugin')}'s log level to {args.get('level')}",
+                "Set it",
+            ),
+        }
+        if spec.name in plain:
+            title, label = plain[spec.name]
+            return {"type": "plain", "title": title}, [
+                cancel,
+                {"id": "go", "label": label, "primary": True},
+            ]
         # Another plugin's action.
         title = f"Run {args.get('action', 'an action')} on {args.get('plugin_id', 'a plugin')}"
         return (

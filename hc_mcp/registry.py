@@ -37,6 +37,7 @@ from .tools import (
     diagnosis,
     events,
     house,
+    operations,
     plugin_actions,
     plugins,
     rules,
@@ -223,6 +224,11 @@ TOOLS: tuple[ToolSpec, ...] = (
              if isinstance(r, dict) else "Sent the commands"),
     ToolSpec("run_scene", house.run_scene, DEVICE_COMMANDS, scopes=("scenes:run",),
              step=_fixed("Ran the scene")),
+    ToolSpec("acknowledge_alert", operations.acknowledge_alert, DEVICE_COMMANDS,
+             scopes=("devices:command",), step=_fixed("Acknowledged the alert")),
+    ToolSpec("room_lights", operations.room_lights, DEVICE_COMMANDS,
+             scopes=("devices:command",),
+             step=lambda a, _r: "Turned the room's lights " + ("on" if a.get("on") else "off")),
     # ── automations ───────────────────────────────────────────────────────
     ToolSpec("create_rule", rules.create_rule, RULE_MUTATIONS,
              scopes=("automations:write",), step=_fixed("Saved the automation")),
@@ -234,11 +240,19 @@ TOOLS: tuple[ToolSpec, ...] = (
              scopes=("automations:write",), step=_fixed("Turned the automation on")),
     ToolSpec("disable_rule", rules.disable_rule, RULE_MUTATIONS,
              scopes=("automations:write",), step=_fixed("Turned the automation off")),
+    ToolSpec("resume_rule", operations.resume_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Resumed the automation")),
     # ── other plugins' actions ────────────────────────────────────────────
     ToolSpec("invoke_plugin_action", plugin_actions.invoke_plugin_action, PLUGIN_ACTIONS,
              scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
     ToolSpec("await_streaming_plugin_action", plugin_actions.await_streaming_plugin_action,
              PLUGIN_ACTIONS, scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
+    ToolSpec("plugin_control", operations.plugin_control, PLUGIN_ACTIONS,
+             scopes=("plugins:write",),
+             step=lambda a, _r: {"start": "Started", "stop": "Stopped"}.get(
+                 a.get("op"), "Restarted") + " the plugin"),
+    ToolSpec("set_plugin_log_level", operations.set_plugin_log_level, PLUGIN_ACTIONS,
+             scopes=("plugins:write",), step=_fixed("Changed the plugin's log level")),
 )  # fmt: skip
 
 BY_NAME = {t.name: t for t in TOOLS}

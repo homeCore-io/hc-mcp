@@ -34,6 +34,15 @@ class HomeCoreClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def send(self, method: str, path: str, body: dict | None = None) -> Any:
+        """Any other call: *method* on *path*, JSON *body*. Returns the JSON
+        reply, or ``{"ok": true}`` for an empty one. Raises on 4xx/5xx."""
+        resp = await self._client.request(method, path, json=body)
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"ok": True}
+        return resp.json()
+
     # ── Endpoint-specific helpers ──────────────────────────────────────────
     async def system_status(self) -> dict:
         return await self.get("/system/status")

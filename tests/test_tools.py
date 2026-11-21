@@ -322,3 +322,47 @@ def test_a_scene_that_sets_a_lock_needs_security_allowed(monkeypatch):
             run(mcp_tool("run_scene")(scene_id="scene-lockup"))
         run(mcp_tool("run_scene")(scene_id="scene-night"))
     assert hc.commands == [("scene-night", {"action": "activate"})]
+
+
+# ── operations ────────────────────────────────────────────────────────────
+
+
+class OpsHomeCore(ToolHomeCore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent_raw: list[tuple[str, str, dict | None]] = []
+
+    async def send(self, method: str, path: str, body: dict | None = None):
+        self.sent_raw.append((method, path, body))
+        return {"ok": True}
+
+
+def test_operations_call_the_right_endpoints(monkeypatch):
+    from hc_mcp.tools import operations
+
+    hc = OpsHomeCore()
+    with using_client(hc):
+        run(operations.acknowledge_alert("a-1"))
+        run(operations.resume_rule("r-1"))
+        run(operations.room_lights("kitchen", on=False))
+        run(operations.plugin_control("plugin.hue", "restart"))
+        run(operations.set_plugin_log_level("plugin.hue", "DEBUG"))
+        with pytest.raises(ValueError):
+            run(operations.plugin_control("plugin.hue", "delete"))
+        with pytest.raises(ValueError):
+            run(operations.set_plugin_log_level("plugin.hue", "loud"))
+    assert hc.sent_raw == [
+        ("POST", "/alerts/a-1/acknowledge", None),
+        ("DELETE", "/automations/r-1/pause", None),
+        ("POST", "/areas/kitchen/off", None),
+        ("POST", "/plugins/plugin.hue/restart", None),
+        ("PATCH", "/plugins/plugin.hue", {"log_level": "debug"}),
+    ]
+
+
+def test_operations_are_write_gated(monkeypatch):
+    monkeypatch.setenv("HC_MCP_ALLOW_WRITE", "")
+    hc = OpsHomeCore()
+    with using_client(hc), pytest.raises(PermissionError, match="plugin_actions"):
+        run(mcp_tool("plugin_control")(plugin_id="plugin.hue", op="restart"))
+    assert hc.sent_raw == []
