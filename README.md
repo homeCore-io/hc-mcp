@@ -34,6 +34,15 @@ full tool inventory live in [`DESIGN.md`](DESIGN.md).
 | `find_recent_errors` | `GET /logs?level=warn` | Warnings and errors across core + every plugin |
 | `list_plugin_actions` | (caps fanout) | Flatten every plugin manifest into one list of actions |
 | `query_plugin_action` | `POST /plugins/:id/query` | Run a plugin action that only reads |
+| `plugin_health` | `GET /plugins` | Every plugin's health and notices, the ones needing attention first |
+| `list_alerts` | `GET /alerts` | What needs attention now (wet, smoke, jammed, battery, offline, rules, plugins) |
+| `audit_log` | `GET /audit` | Who changed what, filtered by event, actor, target, result and time |
+| `paused_rules` | `GET /automations/paused` | Automations another automation has paused |
+| `stale_rule_refs` | `GET /automations/stale-refs` | Automations naming devices that no longer exist |
+| `hub_variables` | `GET /automations/variables` | The variables automations have set, as they are now |
+| `orphaned_devices` | `GET /devices/orphaned` | Devices no plugin manages any more |
+| `vocabulary_check` | `GET /system/vocabulary-check` | Commands and conditions a device won't take, and why |
+| `system_versions` | `GET /system/versions` | Which version of everything is running |
 
 The three log tools need an admin's key: homeCore serves logs to admins
 only, and an API key is an admin only if it holds `users:write`. The key

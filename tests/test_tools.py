@@ -12,7 +12,15 @@ from fakes import FakeHomeCore
 
 from hc_mcp.registry import BY_NAME
 from hc_mcp.server_state import using_client
-from hc_mcp.tools import commands, devices, events, plugin_actions, rules, troubleshooting
+from hc_mcp.tools import (
+    commands,
+    devices,
+    diagnosis,
+    events,
+    plugin_actions,
+    rules,
+    troubleshooting,
+)
 
 
 def _status(code: int, path: str) -> httpx.HTTPStatusError:
@@ -248,3 +256,59 @@ def test_rule_firings_keeps_the_newest_n():
 
 def test_test_draft_rule_is_a_read():
     assert not BY_NAME["test_draft_rule"].mutates
+
+
+# ── diagnosis ─────────────────────────────────────────────────────────────
+
+
+class DiagnosisHomeCore(ToolHomeCore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.got: list[tuple[str, dict]] = []
+
+    async def list_plugins(self) -> list[dict]:
+        return [
+            {"plugin_id": "plugin.hue", "status": "active", "enabled": True, "notices": []},
+            {"plugin_id": "plugin.yolink", "status": "offline", "enabled": True},
+            {"plugin_id": "plugin.old", "status": "offline", "enabled": False},
+            {"plugin_id": "plugin.zwave", "status": "active", "enabled": True,
+             "notices": [{"level": "warn", "code": "stick", "message": "No Z-Wave stick"}]},
+        ]  # fmt: skip
+
+    async def get(self, path: str, **params):
+        self.got.append((path, {k: v for k, v in params.items() if v is not None}))
+        return []
+
+
+def test_plugin_health_puts_the_unhappy_first():
+    hc = DiagnosisHomeCore()
+    with using_client(hc):
+        out = run(diagnosis.plugin_health())
+    assert [r["plugin_id"] for r in out["attention"]] == ["plugin.yolink", "plugin.zwave"]
+    # Turned off and offline is not a problem; active with no notice is fine.
+    assert out["ok"] == ["plugin.hue", "plugin.old"]
+
+
+def test_audit_log_passes_its_filters_and_bounds_the_limit():
+    hc = DiagnosisHomeCore()
+    with using_client(hc):
+        run(diagnosis.audit_log(target_kind="automation", from_="2026-11-20T00:00:00Z",
+                                limit=10_000))  # fmt: skip
+    assert hc.got == [
+        ("/audit", {"target_kind": "automation", "from": "2026-11-20T00:00:00Z", "limit": 500})
+    ]
+
+
+def test_the_diagnosis_tools_are_reads():
+    for name in (
+        "plugin_health",
+        "list_alerts",
+        "audit_log",
+        "paused_rules",
+        "stale_rule_refs",
+        "hub_variables",
+        "orphaned_devices",
+        "vocabulary_check",
+        "system_versions",
+    ):
+        assert not BY_NAME[name].mutates, name  # fmt: skip
