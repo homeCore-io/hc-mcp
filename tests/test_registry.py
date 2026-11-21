@@ -31,9 +31,11 @@ def test_chat_descriptions_drop_the_mcp_gating_note():
 
 
 def test_chat_only_tools_stay_off_the_mcp_server():
+    # The two screen tools draw in the chat; scenes and rooms are on both
+    # since 2026-11-21 (core's own scenes can't be run through command_device).
     mcp_names = {t.name for t in registry.TOOLS if t.mcp}
-    assert not mcp_names & {"list_scenes", "run_scene", "list_rooms", "show_devices",
-                            "suggest_replies"}  # fmt: skip
+    assert not mcp_names & {"show_devices", "suggest_replies"}
+    assert {"list_scenes", "run_scene", "list_rooms"} <= mcp_names
 
 
 def test_an_admin_with_everything_on_gets_every_chat_tool():

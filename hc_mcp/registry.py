@@ -207,10 +207,10 @@ TOOLS: tuple[ToolSpec, ...] = (
              running="Reading the guide"),
     # The log tools stay out of chat: homeCore serves logs to admins only,
     # and the plugin's own key is never an admin's.
-    # Chat only: the household's own words, and the two screen tools.
-    ToolSpec("list_scenes", house.list_scenes, scopes=("scenes:read",), mcp=False,
+    # Chat only: the two screen tools.
+    ToolSpec("list_scenes", house.list_scenes, scopes=("scenes:read",),
              step=_count("scenes")),
-    ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",), mcp=False,
+    ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",),
              step=_count("rooms")),
     ToolSpec("show_devices", house.show_devices, scopes=("devices:read",), mcp=False),
     ToolSpec("suggest_replies", house.suggest_replies, mcp=False),
@@ -222,7 +222,7 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=lambda _a, r: f"Sent {r.get('succeeded', 0)} commands"
              if isinstance(r, dict) else "Sent the commands"),
     ToolSpec("run_scene", house.run_scene, DEVICE_COMMANDS, scopes=("scenes:run",),
-             mcp=False, step=_fixed("Ran the scene")),
+             step=_fixed("Ran the scene")),
     # ── automations ───────────────────────────────────────────────────────
     ToolSpec("create_rule", rules.create_rule, RULE_MUTATIONS,
              scopes=("automations:write",), step=_fixed("Saved the automation")),

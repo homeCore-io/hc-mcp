@@ -30,8 +30,8 @@ import httpx
 from .config import Config
 
 # What hc-mcp's tools need: reading everywhere they look, and the scope
-# behind each HC_MCP_ALLOW_WRITE category (devices:command for
-# device_commands, automations:write for rule_mutations, plugins:write for
+# behind each HC_MCP_ALLOW_WRITE category (devices:command and scenes:run
+# for device_commands, automations:write for rule_mutations, plugins:write for
 # plugin_actions). HC_MCP_ALLOW_WRITE is where the operator chooses what is
 # allowed; a key without the scope would only turn that choice into a 403.
 #
@@ -48,6 +48,7 @@ DEFAULT_SCOPES = [
     "plugins:read",
     "plugins:write",
     "scenes:read",
+    "scenes:run",
 ]
 
 

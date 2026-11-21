@@ -47,10 +47,13 @@ EXPECTED = {
     "vocabulary_check",
     "system_versions",
     "list_skills",
+    "list_scenes",
+    "list_rooms",
     "read_skill",
     # write — gated by permissions.ensure_write
     "command_device",
     "bulk_command",
+    "run_scene",
     "create_rule",
     "update_rule",
     "delete_rule",

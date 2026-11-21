@@ -312,3 +312,13 @@ def test_the_diagnosis_tools_are_reads():
         "system_versions",
     ):
         assert not BY_NAME[name].mutates, name  # fmt: skip
+
+
+def test_a_scene_that_sets_a_lock_needs_security_allowed(monkeypatch):
+    hc = ToolHomeCore()
+    monkeypatch.setenv("HC_MCP_ALLOW_WRITE", "device_commands")
+    with using_client(hc):
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(mcp_tool("run_scene")(scene_id="scene-lockup"))
+        run(mcp_tool("run_scene")(scene_id="scene-night"))
+    assert hc.commands == [("scene-night", {"action": "activate"})]

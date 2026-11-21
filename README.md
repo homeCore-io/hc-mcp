@@ -43,6 +43,7 @@ full tool inventory live in [`DESIGN.md`](DESIGN.md).
 | `orphaned_devices` | `GET /devices/orphaned` | Devices no plugin manages any more |
 | `vocabulary_check` | `GET /system/vocabulary-check` | Commands and conditions a device won't take, and why |
 | `system_versions` | `GET /system/versions` | Which version of everything is running |
+| `list_scenes` / `list_rooms` | `GET /scenes`, `GET /areas` | The house's scenes and rooms, by id and name |
 
 The three log tools need an admin's key: homeCore serves logs to admins
 only, and an API key is an admin only if it holds `users:write`. The key
@@ -57,6 +58,7 @@ users and keys); add it with `--scopes` if hc-mcp should read logs.
 | `await_streaming_plugin_action` | `plugin_actions` | POST + read SSE stream for streaming manifest actions; returns aggregated terminal payload |
 | `command_device` | `device_commands` | PATCH `/devices/:id/state` — turn things on/off, set brightness, lock doors, etc. |
 | `bulk_command` | `device_commands` | Fan out commands across many devices, 8 at a time; per-device success reported |
+| `run_scene` | `device_commands` | POST `/scenes/:id/activate` |
 | `enable_rule` / `disable_rule` | `rule_mutations` | PATCH `/automations/:id` to flip the enabled flag |
 | `delete_rule` | `rule_mutations` | DELETE `/automations/:id` — permanent; read it first if it might be wanted again |
 | `create_rule` | `rule_mutations` | POST `/automations` with a full Rule body |
@@ -134,7 +136,7 @@ hc-mcp setup --rotate
 ```
 
 Defaults: label `hc-mcp`, scopes
-`areas:read,automations:read,automations:write,audit:read,devices:command,devices:read,plugins:read,plugins:write,scenes:read`
+`areas:read,automations:read,automations:write,audit:read,devices:command,devices:read,plugins:read,plugins:write,scenes:read,scenes:run`
 (the scope behind each `HC_MCP_ALLOW_WRITE` category, so allowing one works),
 no expiry. Override with `--label`, `--scopes a,b,c`, `--expires-days N`.
 
