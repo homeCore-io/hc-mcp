@@ -22,6 +22,15 @@ from ..server_state import client
 
 WRITE_CATEGORY = "device_commands"
 
+#: bulk_command sends at most this many commands at once.
+MAX_PARALLEL = 8
+
+
+def _why(device_id: str, e: httpx.HTTPStatusError) -> str:
+    if e.response.status_code == 404:
+        return f"homeCore has no device {device_id!r}; nothing was sent. list_devices has the ids."
+    return f"HTTP {e.response.status_code} — {e.response.text or '(empty body)'}"
+
 
 async def command_device(device_id: str, command: dict) -> dict:
     """Issue a command to a single device.
@@ -57,19 +66,19 @@ async def command_device(device_id: str, command: dict) -> dict:
       - Activate scene:    ``{"action": "activate"}``
       - Start a timer:     ``{"action": "start", "duration_secs": 600}``
 
-    Returns the core response body (typically ``{"ok": true,
-    "device_id": "..."}`` or the updated state). Raises on HTTP 4xx
-    or 5xx with the response detail surfaced.
+    Returns ``{"status": "accepted", "correlation_id": "..."}``: homeCore
+    published the command. It does not mean the device acted; read
+    ``device_state`` again, or pass the ``correlation_id`` to
+    ``correlation_trace`` to see the state change it caused. A device id
+    homeCore doesn't know is refused (HTTP 404) and nothing is sent.
 
     Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or
-    ``all``)."""
+    ``all``); a lock, door, garage or other device that counts for
+    security also needs ``security`` in it."""
     try:
         return await client().command_device(device_id, command)
     except httpx.HTTPStatusError as e:
-        raise RuntimeError(
-            f"command_device failed: HTTP {e.response.status_code} — "
-            f"{e.response.text or '(empty body)'}"
-        ) from e
+        raise RuntimeError(f"command_device failed: {_why(device_id, e)}") from e
 
 
 async def bulk_command(commands: list[dict]) -> dict:
@@ -78,8 +87,8 @@ async def bulk_command(commands: list[dict]) -> dict:
     Each entry in ``commands`` is ``{"device_id": "<id>", "command":
     {...}}``, where the inner body takes the same shapes as
     ``command_device`` (an attribute write or ``{"action": ...}``).
-    Commands run concurrently; per-device failures are
-    captured rather than aborting the batch.
+    Commands run concurrently, at most 8 at a time; per-device failures
+    are captured rather than aborting the batch.
 
     Returns:
       ``{
@@ -104,8 +113,13 @@ async def bulk_command(commands: list[dict]) -> dict:
         return {"total": 0, "succeeded": 0, "failed": 0, "results": []}
 
     c = client()
+    gate = asyncio.Semaphore(MAX_PARALLEL)
 
     async def _one(entry: dict) -> dict:
+        async with gate:
+            return await _send(entry)
+
+    async def _send(entry: dict) -> dict:
         device_id = entry.get("device_id")
         command = entry.get("command")
         if not isinstance(device_id, str) or not isinstance(command, dict):
@@ -118,11 +132,7 @@ async def bulk_command(commands: list[dict]) -> dict:
             resp = await c.command_device(device_id, command)
             return {"device_id": device_id, "ok": True, "response": resp}
         except httpx.HTTPStatusError as e:
-            return {
-                "device_id": device_id,
-                "ok": False,
-                "error": f"HTTP {e.response.status_code} — {e.response.text or '(empty body)'}",
-            }
+            return {"device_id": device_id, "ok": False, "error": _why(device_id, e)}
         except Exception as e:  # noqa: BLE001 — surface anything to the caller
             return {"device_id": device_id, "ok": False, "error": str(e)}
 

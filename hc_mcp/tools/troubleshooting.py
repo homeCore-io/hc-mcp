@@ -1,92 +1,114 @@
 """Diagnostic / troubleshooting tools.
 
-These wrap the WebSocket /api/v1/logs/stream so the MCP can return a
-finite snapshot of recent log lines without keeping a streaming
-connection open. Each call connects, accumulates up to ``lines``
-matching records, and closes — bounded by ``timeout_secs`` so a quiet
-log can't hang the tool.
+All three read ``GET /api/v1/logs``: the newest matching lines of the ring
+buffer homeCore keeps of its own log and every plugin's, filtered on the
+server. That is real history, so a tool call can look back at what already
+happened; to see what an action just caused, note the time first and pass
+it as ``since``.
+
+homeCore serves logs to admins only. A user's token counts if they are an
+admin; an API key counts only if it holds ``users:write``.
 """
 
 from __future__ import annotations
 
+import re
+
+import httpx
+
 from ..server_state import client
+
+#: GET /logs returns at most this many lines.
+MAX_LINES = 1000
+
+_NEEDS_ADMIN = (
+    "homeCore serves logs to admins only, and this key isn't one. An API key "
+    "counts as an admin only if it holds the users:write scope: use an admin "
+    "user's key, or make a key with users:write for hc-mcp."
+)
+
+
+async def _read(
+    *,
+    lines: int,
+    level: str | None,
+    plugin_id: str | None = None,
+    target: str | None = None,
+    since: str | None = None,
+    grep: str | None = None,
+) -> dict:
+    lines = max(1, min(lines, MAX_LINES))
+    grep_re = re.compile(grep) if grep else None
+    try:
+        got = await client().logs(
+            level=level,
+            plugin_id=plugin_id,
+            target=target,
+            since=since,
+            # A grep filters what came back, so ask for the most there is.
+            limit=MAX_LINES if grep_re else lines,
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise PermissionError(_NEEDS_ADMIN) from e
+        if e.response.status_code == 503:
+            raise RuntimeError("Log streaming is turned off in homeCore's config.") from e
+        raise
+    out = got.get("lines", []) if isinstance(got, dict) else []
+    if grep_re:
+        out = [ln for ln in out if grep_re.search(ln.get("message", ""))][-lines:]
+    return {"count": len(out), "lines": out}
 
 
 async def core_logs(
     lines: int = 100,
-    level: str | None = None,
+    level: str = "info",
+    target: str | None = None,
+    since: str | None = None,
     grep: str | None = None,
-    timeout_secs: float = 5.0,
-) -> list[dict]:
-    """Tail homeCore's structured logs via the live stream.
+) -> dict:
+    """The newest lines of homeCore's log, oldest first: core's own lines
+    and every plugin's.
 
-    Filters:
-      - level:        one of trace/debug/info/warn/error (case-insensitive)
-      - grep:         regex applied against the message field
-      - timeout_secs: how long to wait if `lines` matching records don't arrive
+    Filters, all optional:
+      - level:  the least severe level to include: trace, debug, info
+                (default), warn or error
+      - target: a module prefix, such as ``hc_core::engine``
+      - since:  an RFC 3339 time; only lines after it. Note the time before
+                you trigger something, then read what followed.
+      - grep:   a regular expression matched against each line's message
 
-    Returns the next N matching log records (NOT historical — the
-    stream is live, so this captures what's emitted starting now,
-    plus any in-flight buffered lines hc-core replays on connect).
-
-    Use after triggering an action to see what just happened. For
-    post-hoc historical search across all modules, use
-    `find_recent_errors`.
-    """
-    return await client().stream_logs(
-        max_lines=lines,
-        timeout_secs=timeout_secs,
-        level=level,
-        grep=grep,
-    )
+    Returns ``{count, lines}``; each line has timestamp, level, target,
+    message and fields (a plugin's lines carry ``fields.plugin_id``). At
+    most 1000 lines. Logs are for admins: a key without users:write is
+    refused."""
+    return await _read(lines=lines, level=level, target=target, since=since, grep=grep)
 
 
 async def plugin_logs(
     plugin_id: str,
     lines: int = 100,
-    level: str | None = None,
+    level: str = "info",
+    since: str | None = None,
     grep: str | None = None,
-    timeout_secs: float = 5.0,
-) -> list[dict]:
-    """Tail a specific plugin's logs.
+) -> dict:
+    """The newest lines one plugin's process logged, oldest first.
 
-    Plugins forward their own `tracing` output to the broker on
-    homecore/plugins/<id>/logs (see hc-logging::MqttLogLayer);
-    hc-core's /logs/stream merges those with its own log stream.
-    This tool filters that merged stream by `module = plugin_id`.
-
-    Same filters + timeout semantics as `core_logs`. Useful when a
-    plugin is misbehaving and you want only its lines, not the rest
-    of homeCore's chatter."""
-    return await client().stream_logs(
-        max_lines=lines,
-        timeout_secs=timeout_secs,
-        level=level,
-        module=plugin_id,
-        grep=grep,
-    )
+    ``plugin_id`` is exact (``plugin.hue``), and catches everything that
+    process emitted: its own modules, the SDK's and its dependencies'.
+    Same ``level``, ``since`` and ``grep`` filters as ``core_logs``. Use it
+    when a plugin is misbehaving and you want only its lines."""
+    return await _read(lines=lines, level=level, plugin_id=plugin_id, since=since, grep=grep)
 
 
 async def find_recent_errors(
     lines: int = 50,
-    timeout_secs: float = 5.0,
-) -> list[dict]:
-    """Capture the next N WARN-or-higher log records across core +
-    every plugin. Use as a first step when "something is broken
-    but I don't know where" — fastest way to surface what
-    component is unhappy without naming it ahead of time.
+    since: str | None = None,
+) -> dict:
+    """The newest warnings and errors across core and every plugin, oldest
+    first. A first step when something is wrong and you don't yet know
+    where: each line's ``target`` and ``fields.plugin_id`` say which part
+    is unhappy.
 
-    For ERROR-only, use `core_logs` / `plugin_logs` with
-    `level = "error"`."""
-    records = await client().stream_logs(
-        max_lines=lines * 4,  # over-fetch; we'll filter
-        timeout_secs=timeout_secs,
-    )
-    out: list[dict] = []
-    for rec in records:
-        lv = (rec.get("level") or "").lower()
-        if lv in ("warn", "warning", "error"):
-            out.append(rec)
-            if len(out) >= lines:
-                break
-    return out
+    For errors alone, use ``core_logs`` with ``level = "error"``."""
+    return await _read(lines=lines, level="warn", since=since)

@@ -29,8 +29,8 @@ from mcp.server.fastmcp.prompts import Prompt
 from mcp.server.fastmcp.resources import TextResource
 from mcp.server.fastmcp.tools import Tool as _FastTool
 
-from . import guides
-from .permissions import ensure_write
+from . import guides, security
+from .permissions import ensure_write, is_allowed
 from .tools import (
     commands,
     devices,
@@ -57,6 +57,12 @@ PLUGIN_ACTIONS = "plugin_actions"
 SECURITY = "security"
 
 CATEGORIES = (READ, DEVICE_COMMANDS, RULE_MUTATIONS, PLUGIN_ACTIONS, SECURITY)
+
+MCP_SECURITY_REFUSAL = (
+    "hc-mcp: not done. {names} counts for security (locks, doors and the like). "
+    "Changing one needs security allowed as well: add it to HC_MCP_ALLOW_WRITE "
+    "(for example HC_MCP_ALLOW_WRITE=device_commands,security), or use all."
+)
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,13 @@ class ToolSpec:
         @functools.wraps(self.fn)
         async def gated(*args: Any, **kwargs: Any) -> Any:
             ensure_write(self.category)
+            # The chat's "Locks, doors and security" switch, for the MCP
+            # server: a change that touches a security device needs
+            # `security` in HC_MCP_ALLOW_WRITE as well as its own category.
+            if not is_allowed(SECURITY):
+                names = await security.touched(self.name, kwargs)
+                if names:
+                    raise PermissionError(MCP_SECURITY_REFUSAL.format(names=", ".join(names)))
             return await self.fn(*args, **kwargs)
 
         return gated
@@ -150,6 +163,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_fixed("Tried it against the house now")),
     ToolSpec("rule_firings", rules.rule_firings, scopes=("automations:read",),
              step=_fixed("Checked what ran")),
+    ToolSpec("test_draft_rule", rules.test_draft_rule, scopes=("automations:read",),
+             step=_fixed("Tried the draft against the house now")),
     ToolSpec("recent_events", events.recent_events, scopes=("devices:read",),
              step=_fixed("Read recent events")),
     ToolSpec("correlation_trace", events.correlation_trace, scopes=("devices:read",),
@@ -164,6 +179,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_fixed("Checked the plugins' connections")),
     ToolSpec("list_plugin_actions", plugin_actions.list_plugin_actions,
              scopes=("plugins:read",), step=_count("plugin actions", "Found")),
+    ToolSpec("query_plugin_action", plugin_actions.query_plugin_action,
+             scopes=("devices:read",), step=_fixed("Asked the plugin")),
     # How-to guides. The chat names them in its instructions, so it only reads.
     ToolSpec("list_skills", skills.list_skills, chat=False, step=_count("guides", "Found")),
     ToolSpec("read_skill", skills.read_skill, step=_fixed("Read the guide"),

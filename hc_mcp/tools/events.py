@@ -44,8 +44,8 @@ async def correlation_trace(
       - window:     how many events we scanned (limit)
       - truncated:  true if we hit the limit (raise it and re-run if so)
 
-    Common usage: take a correlation_id from `recent_events` or from
-    a plugin command response, then trace every effect.
+    Common usage: take the ``correlation_id`` that ``command_device``
+    returns (or one from ``recent_events``), then trace every effect.
 
     NOTE: filtering is client-side because the /events endpoint
     doesn't natively accept a correlation_id query param yet —
@@ -55,14 +55,7 @@ async def correlation_trace(
 
     matches: list[dict] = []
     for ev in events:
-        # correlation_id may live at the top level or nested in change
-        # metadata depending on the event variant.
-        cid = ev.get("correlation_id")
-        if cid is None:
-            change = ev.get("change") or ev.get("current") or {}
-            if isinstance(change, dict):
-                cid = change.get("correlation_id")
-        if cid == correlation_id:
+        if _correlation_id(ev) == correlation_id:
             matches.append(ev)
 
     # /events returns most-recent-first; reverse for chronological view.
@@ -74,3 +67,18 @@ async def correlation_trace(
         "truncated": len(events) >= scan_limit,
         "matches": matches,
     }
+
+
+def _correlation_id(row: dict) -> str | None:
+    """The correlation id of one ``GET /events`` row.
+
+    A row is ``{seq, event_type, device_id, event: {...}}``. Most events
+    carry the id at ``event.correlation_id``; a state change carries it in
+    its provenance, ``event.change.correlation_id``."""
+    ev = row.get("event")
+    if not isinstance(ev, dict):
+        return None
+    cid = ev.get("correlation_id")
+    if cid is None and isinstance(ev.get("change"), dict):
+        cid = ev["change"].get("correlation_id")
+    return cid

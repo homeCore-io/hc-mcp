@@ -53,6 +53,14 @@ class HomeCoreClient:
     async def get_device(self, device_id: str) -> dict:
         return await self.get(f"/devices/{device_id}")
 
+    async def get_device_schema(self, device_id: str) -> dict | None:
+        """GET /devices/{id}/schema, or ``None`` when the device declares none."""
+        resp = await self._client.get(f"/devices/{device_id}/schema")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
     async def device_history(
         self,
         device_id: str,
@@ -105,84 +113,43 @@ class HomeCoreClient:
             params["device_id"] = device_id
         return await self.get("/events", **params)
 
-    async def test_automation(self, rule_id: str) -> dict:
+    async def test_automation(self, rule_id: str, at: str | None = None) -> dict:
         """POST /automations/{id}/test — dry-run the rule and report
         which conditions would pass and which actions would fire.
+        ``at`` (RFC 3339) evaluates time conditions as of that moment.
         """
-        resp = await self._client.post(f"/automations/{rule_id}/test")
+        params = {"at": at} if at else None
+        resp = await self._client.post(f"/automations/{rule_id}/test", params=params)
         resp.raise_for_status()
         return resp.json()
 
-    async def stream_logs(
+    async def test_draft_automation(self, rule: dict, at: str | None = None) -> dict:
+        """POST /automations/test — dry-run a rule that isn't saved."""
+        params = {"at": at} if at else None
+        resp = await self._client.post("/automations/test", json=rule, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def logs(
         self,
-        max_lines: int,
-        timeout_secs: float,
         level: str | None = None,
-        module: str | None = None,
-        grep: str | None = None,
-    ) -> list[dict]:
-        """Connect to WS /logs/stream, accumulate up to max_lines that
-        match the filters, then close. Bounded by timeout_secs.
-
-        Returns a list of log records (dicts as emitted by hc-core).
-        Filters applied client-side because the WS protocol may not
-        accept all of them as query params today.
-        """
-        import asyncio
-        import json
-        import re
-        from urllib.parse import urlparse, urlunparse
-
-        # Build the WS URL by swapping http(s) → ws(s) on the configured base.
-        parsed = urlparse(self._cfg.base_url)
-        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-        ws_url = urlunparse(
-            (
-                ws_scheme,
-                parsed.netloc,
-                parsed.path.rstrip("/") + "/api/v1/logs/stream",
-                "",
-                "",
-                "",
-            )
+        plugin_id: str | None = None,
+        target: str | None = None,
+        since: str | None = None,
+        limit: int | None = None,
+    ) -> dict:
+        """GET /logs: the newest matching lines of homeCore's log ring,
+        oldest first, as ``{count, lines}``. ``level`` is a minimum;
+        ``plugin_id`` is exact (that plugin's process only); ``target`` a
+        module prefix; ``since`` an RFC 3339 time. Admins only."""
+        return await self.get(
+            "/logs",
+            level=level,
+            plugin_id=plugin_id,
+            target=target,
+            since=since,
+            limit=limit,
         )
-
-        try:
-            import websockets
-        except ImportError as e:
-            raise RuntimeError(
-                "websockets package required for log streaming; "
-                "install hc-mcp with [websockets] extra"
-            ) from e
-
-        headers = {"Authorization": f"Bearer {self._cfg.api_key}"}
-        grep_re = re.compile(grep) if grep else None
-        out: list[dict] = []
-
-        async def collect() -> None:
-            async with websockets.connect(ws_url, extra_headers=headers) as ws:
-                async for raw in ws:
-                    if isinstance(raw, bytes):
-                        raw = raw.decode("utf-8", errors="replace")
-                    try:
-                        rec = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    if level and rec.get("level", "").lower() != level.lower():
-                        continue
-                    if module and rec.get("module", "") != module:
-                        continue
-                    if grep_re and not grep_re.search(rec.get("message", "")):
-                        continue
-                    out.append(rec)
-                    if len(out) >= max_lines:
-                        return
-
-        try:
-            await asyncio.wait_for(collect(), timeout=timeout_secs)
-        except TimeoutError:
-            pass  # return whatever we accumulated
-        return out
 
     # ── Writes ─────────────────────────────────────────────────────────────
     async def send_plugin_command(
@@ -194,6 +161,20 @@ class HomeCoreClient:
         body: dict = dict(params or {})
         body["action"] = action
         resp = await self._client.post(f"/plugins/{plugin_id}/command", json=body)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def query_plugin(
+        self,
+        plugin_id: str,
+        action: str,
+        params: dict | None = None,
+    ) -> dict:
+        """POST /plugins/{id}/query: a read-only action, open to anyone who
+        can read devices (``/command`` needs ``plugins:write``)."""
+        body: dict = dict(params or {})
+        body["action"] = action
+        resp = await self._client.post(f"/plugins/{plugin_id}/query", json=body)
         resp.raise_for_status()
         return resp.json()
 
@@ -228,13 +209,12 @@ class HomeCoreClient:
         return resp.json()
 
     async def delete_automation(self, rule_id: str) -> dict:
-        """DELETE /automations/{id} — removes the rule and patches any
-        rule files that reference its devices. Core returns
-        ``{affected_rules: [...]}`` per CLAUDE.md."""
+        """DELETE /automations/{id} — removes the rule file. Core answers
+        204 with no body."""
         resp = await self._client.delete(f"/automations/{rule_id}")
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
-            return {"ok": True, "rule_id": rule_id, "affected_rules": []}
+            return {"ok": True, "rule_id": rule_id}
         return resp.json()
 
     async def create_automation(self, rule: dict) -> dict:

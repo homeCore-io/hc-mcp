@@ -21,7 +21,6 @@ dependencies = [
     "mcp>=1.0,<2",
     "httpx>=0.27",
     "pydantic>=2.6",
-    "websockets>=12.0",
     # The in-app chat's model. 2.x is built on httpx2, so it does not share
     # (or fight over) the httpx this package uses for homeCore.
     "anthropic>=2.0,<3",

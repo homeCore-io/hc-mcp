@@ -29,6 +29,7 @@ EXPECTED = {
     "list_rules",
     "get_rule",
     "rule_test",
+    "test_draft_rule",
     "rule_firings",
     "recent_events",
     "core_logs",
@@ -47,6 +48,7 @@ EXPECTED = {
     "enable_rule",
     "disable_rule",
     "list_plugin_actions",
+    "query_plugin_action",
     "invoke_plugin_action",
     "await_streaming_plugin_action",
 }
