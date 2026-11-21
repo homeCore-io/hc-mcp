@@ -159,3 +159,30 @@ async def system_versions() -> Any:
     and each plugin. Check it before reading a changelog or blaming a bug
     that a release fixed."""
     return await client().get("/system/versions")
+
+
+async def plugin_runtimes() -> dict:
+    """The plugin runtimes (the hosts that run Python and other non-Rust
+    plugins away from homeCore), how each is doing, and which plugins are
+    placed on which, with the interpreter each runs on.
+
+    ``runtimes`` rows carry the runtime's status, host version, last
+    contact and whether it is outdated; ``placements`` say which plugin
+    version is meant to be on which runtime. Admins only (plugins:write)."""
+    c = client()
+    runtimes = await c.get("/plugin-runtimes")
+    placements = await c.get("/plugin-runtimes/placements")
+    return {
+        "runtimes": runtimes.get("runtimes", runtimes) if isinstance(runtimes, dict) else runtimes,
+        "placements": placements.get("placements", placements)
+        if isinstance(placements, dict)
+        else placements,
+    }
+
+
+async def list_backups() -> Any:
+    """The backups homeCore keeps on its own schedule: each one's name, size
+    and when it was made, with how often it makes one and how many it keeps.
+    Check it before a risky change, or when asked whether the house is
+    backed up. Admins only."""
+    return await client().get("/system/backups")

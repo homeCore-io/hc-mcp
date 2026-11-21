@@ -46,6 +46,8 @@ EXPECTED = {
     "orphaned_devices",
     "vocabulary_check",
     "system_versions",
+    "plugin_runtimes",
+    "list_backups",
     "list_skills",
     "list_scenes",
     "list_rooms",

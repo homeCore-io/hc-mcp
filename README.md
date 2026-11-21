@@ -43,6 +43,8 @@ full tool inventory live in [`DESIGN.md`](DESIGN.md).
 | `orphaned_devices` | `GET /devices/orphaned` | Devices no plugin manages any more |
 | `vocabulary_check` | `GET /system/vocabulary-check` | Commands and conditions a device won't take, and why |
 | `system_versions` | `GET /system/versions` | Which version of everything is running |
+| `plugin_runtimes` | `GET /plugin-runtimes` + `/placements` | Runtimes, their health, and which plugins run where (admin) |
+| `list_backups` | `GET /system/backups` | The scheduled backups homeCore keeps (admin) |
 | `list_scenes` / `list_rooms` | `GET /scenes`, `GET /areas` | The house's scenes and rooms, by id and name |
 
 The three log tools need an admin's key: homeCore serves logs to admins
