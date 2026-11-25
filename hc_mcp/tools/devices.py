@@ -13,10 +13,18 @@ async def list_devices() -> list[dict]:
 
 
 async def device_state(device_id: str) -> dict:
-    """Current state + schema for a single device. Includes the
-    attribute-level schema so callers can tell which fields are
-    commandable vs read-only."""
-    return await client().get_device(device_id)
+    """Current state and schema for a single device.
+
+    The device record (attributes, available, area, device_type, ...) with
+    ``schema`` added: each attribute's type, unit, range and whether it is
+    writable, and the actions the device declares. Read it before
+    ``command_device`` to see what can be set. ``schema`` is ``null`` for a
+    device that declares none."""
+    c = client()
+    device = await c.get_device(device_id)
+    if isinstance(device, dict):
+        device = {**device, "schema": await c.get_device_schema(device_id)}
+    return device
 
 
 async def device_history(

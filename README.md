@@ -20,29 +20,54 @@ full tool inventory live in [`DESIGN.md`](DESIGN.md).
 | `plugin_status` | `GET /plugins/:id` | One plugin in detail |
 | `plugin_capabilities` | `GET /plugins/:id/capabilities` | Declared actions for a plugin |
 | `list_devices` | `GET /devices` | Registered devices + state |
-| `device_state` | `GET /devices/:id` | Single device + schema |
+| `device_state` | `GET /devices/:id` + `/schema` | Single device + schema |
 | `device_history` | `GET /devices/:id/history` | Time-series for a device attribute |
 | `list_rules` | `GET /automations` | All automations |
 | `get_rule` | `GET /automations/:id` | One automation full body |
 | `rule_firings` | `GET /automations/:id/history` | Recent fire history |
-| `rule_test` | `POST /automations/:id/test` | Dry-run a rule against current state |
+| `rule_test` | `POST /automations/:id/test` | Dry-run a rule against current state, or as of a time (`at`) |
+| `test_draft_rule` | `POST /automations/test` | Dry-run a rule body before saving it |
 | `recent_events` | `GET /events` | Tail of the event ring buffer |
-| `correlation_trace` | client-side filter | Walk a single command's life cycle by correlation_id |
-| `core_logs` | `WS /logs/stream` | Tail of homeCore's structured logs |
-| `plugin_logs` | `WS /logs/stream` | Same, filtered to one plugin |
-| `find_recent_errors` | `WS /logs/stream` | WARN/ERROR across core + every plugin |
+| `correlation_trace` | client-side filter | Walk a command's life cycle by the `correlation_id` `command_device` returns |
+| `core_logs` | `GET /logs` | The newest lines of homeCore's log (`level`, `target`, `since`, `grep`) |
+| `plugin_logs` | `GET /logs?plugin_id=` | The same for one plugin's process |
+| `find_recent_errors` | `GET /logs?level=warn` | Warnings and errors across core + every plugin |
 | `list_plugin_actions` | (caps fanout) | Flatten every plugin manifest into one list of actions |
+| `query_plugin_action` | `POST /plugins/:id/query` | Run a plugin action that only reads |
+| `plugin_health` | `GET /plugins` | Every plugin's health and notices, the ones needing attention first |
+| `list_alerts` | `GET /alerts` | What needs attention now (wet, smoke, jammed, battery, offline, rules, plugins) |
+| `audit_log` | `GET /audit` | Who changed what, filtered by event, actor, target, result and time |
+| `paused_rules` | `GET /automations/paused` | Automations another automation has paused |
+| `stale_rule_refs` | `GET /automations/stale-refs` | Automations naming devices that no longer exist |
+| `hub_variables` | `GET /automations/variables` | The variables automations have set, as they are now |
+| `orphaned_devices` | `GET /devices/orphaned` | Devices no plugin manages any more |
+| `vocabulary_check` | `GET /system/vocabulary-check` | Commands and conditions a device won't take, and why |
+| `system_versions` | `GET /system/versions` | Which version of everything is running |
+| `plugin_runtimes` | `GET /plugin-runtimes` + `/placements` | Runtimes, their health, and which plugins run where (admin) |
+| `list_backups` | `GET /system/backups` | The scheduled backups homeCore keeps (admin) |
+| `list_scenes` / `list_rooms` | `GET /scenes`, `GET /areas` | The house's scenes and rooms, by id and name |
+
+The three log tools need an admin's key: homeCore serves logs to admins
+only, and an API key is an admin only if it holds `users:write`. The key
+`hc-mcp setup` makes leaves that out on purpose (`users:write` can make
+users and keys); add it with `--scopes` if hc-mcp should read logs.
 
 ### Write-gated (require `HC_MCP_ALLOW_WRITE`)
 
 | Tool | Category | Effect |
 |---|---|---|
-| `invoke_plugin_action` | `plugin_actions` | POST `/plugins/:id/command` for non-streaming manifest actions |
+| `invoke_plugin_action` | `plugin_actions` | POST `/plugins/:id/command` for non-streaming manifest actions (`/query` for read-only ones) |
 | `await_streaming_plugin_action` | `plugin_actions` | POST + read SSE stream for streaming manifest actions; returns aggregated terminal payload |
 | `command_device` | `device_commands` | PATCH `/devices/:id/state` — turn things on/off, set brightness, lock doors, etc. |
-| `bulk_command` | `device_commands` | Fan out commands across many devices in parallel; per-device success reported |
+| `bulk_command` | `device_commands` | Fan out commands across many devices, 8 at a time; per-device success reported |
+| `run_scene` | `device_commands` | POST `/scenes/:id/activate` |
+| `acknowledge_alert` | `device_commands` | POST `/alerts/:id/acknowledge` — marks it seen; it stays until it clears |
+| `room_lights` | `device_commands` | POST `/areas/:id/on` or `/off` — a room's lights only, restored as they were |
+| `resume_rule` | `rule_mutations` | DELETE `/automations/:id/pause` — undo another automation's pause |
+| `plugin_control` | `plugin_actions` | POST `/plugins/:id/start`, `/stop` or `/restart` (plugins homeCore runs) |
+| `set_plugin_log_level` | `plugin_actions` | PATCH `/plugins/:id` `log_level` — lasts; put it back after debugging |
 | `enable_rule` / `disable_rule` | `rule_mutations` | PATCH `/automations/:id` to flip the enabled flag |
-| `delete_rule` | `rule_mutations` | DELETE `/automations/:id` (also patches references in other rules) |
+| `delete_rule` | `rule_mutations` | DELETE `/automations/:id` — permanent; read it first if it might be wanted again |
 | `create_rule` | `rule_mutations` | POST `/automations` with a full Rule body |
 | `update_rule` | `rule_mutations` | PUT `/automations/:id` — full replace of the rule body |
 
@@ -50,6 +75,15 @@ Set `HC_MCP_ALLOW_WRITE` to a comma-separated list of categories (or
 `all`) in the hc-mcp environment to enable. Each category is opt-in
 independently — for example, `HC_MCP_ALLOW_WRITE=device_commands` lets
 Claude turn on lights but not edit rules.
+
+**Locks, doors and security.** A change that touches a device counting
+for security (locks, doors, windows, covers, garages, alarms, or any
+device marked so) also needs `security` in the list:
+`HC_MCP_ALLOW_WRITE=device_commands,security`. That covers a device
+command, a scene or automation that names one, and a plugin action that
+names one or belongs to a plugin that owns one (a read-only action never
+counts). `all` includes it. The in-app chat applies the same check, with
+its "Locks, doors and security" setting.
 
 ```bash
 # In your Claude Desktop / Claude Code MCP server entry:
@@ -96,11 +130,11 @@ homeCore and writes the config file at `~/.config/hc-mcp/config.toml`
 ```bash
 # Option A — already have an admin JWT (e.g. from the admin UI's
 #            "API tokens" panel):
-hc-mcp setup --base-url http://10.0.10.20:8080 \
+hc-mcp setup --base-url http://192.168.1.10:8080 \
              --admin-token "$ADMIN_JWT"
 
 # Option B — log in via /auth/login first:
-hc-mcp setup --base-url http://10.0.10.20:8080 \
+hc-mcp setup --base-url http://192.168.1.10:8080 \
              --username admin
 # (password prompted on stdin)
 
@@ -109,7 +143,8 @@ hc-mcp setup --rotate
 ```
 
 Defaults: label `hc-mcp`, scopes
-`areas:read,automations:read,audit:read,devices:read,plugins:read,plugins:write,scenes:read`,
+`areas:read,automations:read,automations:write,audit:read,devices:command,devices:read,plugins:read,plugins:write,scenes:read,scenes:run`
+(the scope behind each `HC_MCP_ALLOW_WRITE` category, so allowing one works),
 no expiry. Override with `--label`, `--scopes a,b,c`, `--expires-days N`.
 
 > The admin JWT is only used for the `/auth/api-keys` POST during
@@ -133,7 +168,7 @@ api_key  = "hc_sk_…"        # from the admin UI or a prior setup run
 
 ### Claude Code
 
-Add to `~/.claude.json` (or per-project `.claude/settings.json`):
+Add to `~/.claude.json` (or a project's `.mcp.json`):
 
 ```json
 {
@@ -219,8 +254,7 @@ clients/hc-mcp --sdk sdks/hc-plugin-sdk-py`.
   machine can connect over Tailscale) lands in a follow-up.
 - **No install-aware substrate.** Tools that would need direct host
   access (journalctl, `docker logs`, config-file reads, service
-  restarts) are not yet implemented. The substrate-aware design is
-  parked at `claude-notes/plans/hc_mcp_install_aware.md` (DEFERRED).
+  restarts) are not yet implemented.
 - **No live MQTT tap.** `mqtt_tap` needs a persistent MQTT client;
   deferred to Phase 4.
 

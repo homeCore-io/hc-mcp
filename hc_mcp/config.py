@@ -47,8 +47,9 @@ def load(explicit_path: str | None = None) -> Config:
     if not api_key:
         raise RuntimeError(
             "hc-mcp: missing API key. Set HC_MCP_API_KEY or write "
-            "[homecore].api_key in ~/.config/hc-mcp/config.toml. Issue a key "
-            "with `hc-cli api-key issue --owner mcp-service --role observer`."
+            "[homecore].api_key in ~/.config/hc-mcp/config.toml, or run "
+            "`hc-mcp setup` to make one. By hand: `hc-cli api-key create "
+            "--label hc-mcp --scopes devices:read,automations:read,plugins:read`."
         )
     timeout_raw = os.environ.get("HC_MCP_TIMEOUT_SECS") or file_data.get("timeout_secs", 5)
     timeout_secs = float(timeout_raw)

@@ -85,7 +85,11 @@ async def list_scenes() -> list[dict]:
 
 
 async def run_scene(scene_id: str) -> dict:
-    """Run a scene by its id (from ``list_scenes``)."""
+    """Run a scene by its id (from ``list_scenes``).
+
+    Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or
+    ``all``); a scene that sets a lock, door or other device that counts for
+    security also needs ``security`` in it."""
     return await client().activate_scene(scene_id)
 
 

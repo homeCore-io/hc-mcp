@@ -29,17 +29,26 @@ import httpx
 
 from .config import Config
 
-# Phase 1 + plugin-action scope set. Read-only across the surfaces
-# hc-mcp's current tools touch, plus plugins:write so
-# invoke_plugin_action can dispatch commands.
+# What hc-mcp's tools need: reading everywhere they look, and the scope
+# behind each HC_MCP_ALLOW_WRITE category (devices:command and scenes:run
+# for device_commands, automations:write for rule_mutations, plugins:write for
+# plugin_actions). HC_MCP_ALLOW_WRITE is where the operator chooses what is
+# allowed; a key without the scope would only turn that choice into a 403.
+#
+# Not users:write, although the log tools need it: homeCore serves logs to
+# admins only, and users:write is what makes a key an admin, able to make
+# users and keys. Grant it with --scopes only if hc-mcp should read logs.
 DEFAULT_SCOPES = [
     "areas:read",
     "automations:read",
+    "automations:write",
     "audit:read",
+    "devices:command",
     "devices:read",
     "plugins:read",
     "plugins:write",
     "scenes:read",
+    "scenes:run",
 ]
 
 

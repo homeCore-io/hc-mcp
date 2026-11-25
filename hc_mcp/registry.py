@@ -29,13 +29,15 @@ from mcp.server.fastmcp.prompts import Prompt
 from mcp.server.fastmcp.resources import TextResource
 from mcp.server.fastmcp.tools import Tool as _FastTool
 
-from . import guides
-from .permissions import ensure_write
+from . import guides, security
+from .permissions import ensure_write, is_allowed
 from .tools import (
     commands,
     devices,
+    diagnosis,
     events,
     house,
+    operations,
     plugin_actions,
     plugins,
     rules,
@@ -57,6 +59,12 @@ PLUGIN_ACTIONS = "plugin_actions"
 SECURITY = "security"
 
 CATEGORIES = (READ, DEVICE_COMMANDS, RULE_MUTATIONS, PLUGIN_ACTIONS, SECURITY)
+
+MCP_SECURITY_REFUSAL = (
+    "hc-mcp: not done. {names} counts for security (locks, doors and the like). "
+    "Changing one needs security allowed as well: add it to HC_MCP_ALLOW_WRITE "
+    "(for example HC_MCP_ALLOW_WRITE=device_commands,security), or use all."
+)
 
 
 @dataclass(frozen=True)
@@ -110,6 +118,13 @@ class ToolSpec:
         @functools.wraps(self.fn)
         async def gated(*args: Any, **kwargs: Any) -> Any:
             ensure_write(self.category)
+            # The chat's "Locks, doors and security" switch, for the MCP
+            # server: a change that touches a security device needs
+            # `security` in HC_MCP_ALLOW_WRITE as well as its own category.
+            if not is_allowed(SECURITY):
+                names = await security.touched(self.name, kwargs)
+                if names:
+                    raise PermissionError(MCP_SECURITY_REFUSAL.format(names=", ".join(names)))
             return await self.fn(*args, **kwargs)
 
         return gated
@@ -150,6 +165,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_fixed("Tried it against the house now")),
     ToolSpec("rule_firings", rules.rule_firings, scopes=("automations:read",),
              step=_fixed("Checked what ran")),
+    ToolSpec("test_draft_rule", rules.test_draft_rule, scopes=("automations:read",),
+             step=_fixed("Tried the draft against the house now")),
     ToolSpec("recent_events", events.recent_events, scopes=("devices:read",),
              step=_fixed("Read recent events")),
     ToolSpec("correlation_trace", events.correlation_trace, scopes=("devices:read",),
@@ -162,18 +179,43 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_fixed("Looked for errors")),
     ToolSpec("broker_diagnose", system.broker_diagnose, scopes=("plugins:read",),
              step=_fixed("Checked the plugins' connections")),
+    ToolSpec("plugin_health", diagnosis.plugin_health, scopes=("plugins:read",),
+             step=_fixed("Checked how the plugins are doing")),
+    ToolSpec("list_alerts", diagnosis.list_alerts, scopes=("devices:read",),
+             step=_count("alerts")),
+    ToolSpec("audit_log", diagnosis.audit_log, scopes=("audit:read",),
+             step=_fixed("Read who changed what")),
+    ToolSpec("paused_rules", diagnosis.paused_rules, scopes=("automations:read",),
+             step=_fixed("Checked for paused automations")),
+    ToolSpec("stale_rule_refs", diagnosis.stale_rule_refs, scopes=("automations:read",),
+             step=_fixed("Checked automations for missing devices")),
+    ToolSpec("hub_variables", diagnosis.hub_variables, scopes=("automations:read",),
+             step=_fixed("Read the hub variables")),
+    ToolSpec("orphaned_devices", diagnosis.orphaned_devices, scopes=("devices:read",),
+             step=_fixed("Checked for devices no plugin manages")),
+    ToolSpec("vocabulary_check", diagnosis.vocabulary_check,
+             scopes=("devices:read", "automations:read"),
+             step=_fixed("Checked automations against what devices take")),
+    ToolSpec("system_versions", diagnosis.system_versions,
+             step=_fixed("Read what versions are running")),
+    ToolSpec("plugin_runtimes", diagnosis.plugin_runtimes, admin_only=True, chat=False,
+             step=_fixed("Checked the plugin runtimes")),
+    ToolSpec("list_backups", diagnosis.list_backups, admin_only=True, chat=False,
+             step=_fixed("Checked the backups")),
     ToolSpec("list_plugin_actions", plugin_actions.list_plugin_actions,
              scopes=("plugins:read",), step=_count("plugin actions", "Found")),
+    ToolSpec("query_plugin_action", plugin_actions.query_plugin_action,
+             scopes=("devices:read",), step=_fixed("Asked the plugin")),
     # How-to guides. The chat names them in its instructions, so it only reads.
     ToolSpec("list_skills", skills.list_skills, chat=False, step=_count("guides", "Found")),
     ToolSpec("read_skill", skills.read_skill, step=_fixed("Read the guide"),
              running="Reading the guide"),
     # The log tools stay out of chat: homeCore serves logs to admins only,
     # and the plugin's own key is never an admin's.
-    # Chat only: the household's own words, and the two screen tools.
-    ToolSpec("list_scenes", house.list_scenes, scopes=("scenes:read",), mcp=False,
+    # Chat only: the two screen tools.
+    ToolSpec("list_scenes", house.list_scenes, scopes=("scenes:read",),
              step=_count("scenes")),
-    ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",), mcp=False,
+    ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",),
              step=_count("rooms")),
     ToolSpec("show_devices", house.show_devices, scopes=("devices:read",), mcp=False),
     ToolSpec("suggest_replies", house.suggest_replies, mcp=False),
@@ -185,7 +227,12 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=lambda _a, r: f"Sent {r.get('succeeded', 0)} commands"
              if isinstance(r, dict) else "Sent the commands"),
     ToolSpec("run_scene", house.run_scene, DEVICE_COMMANDS, scopes=("scenes:run",),
-             mcp=False, step=_fixed("Ran the scene")),
+             step=_fixed("Ran the scene")),
+    ToolSpec("acknowledge_alert", operations.acknowledge_alert, DEVICE_COMMANDS,
+             scopes=("devices:command",), step=_fixed("Acknowledged the alert")),
+    ToolSpec("room_lights", operations.room_lights, DEVICE_COMMANDS,
+             scopes=("devices:command",),
+             step=lambda a, _r: "Turned the room's lights " + ("on" if a.get("on") else "off")),
     # ── automations ───────────────────────────────────────────────────────
     ToolSpec("create_rule", rules.create_rule, RULE_MUTATIONS,
              scopes=("automations:write",), step=_fixed("Saved the automation")),
@@ -197,11 +244,19 @@ TOOLS: tuple[ToolSpec, ...] = (
              scopes=("automations:write",), step=_fixed("Turned the automation on")),
     ToolSpec("disable_rule", rules.disable_rule, RULE_MUTATIONS,
              scopes=("automations:write",), step=_fixed("Turned the automation off")),
+    ToolSpec("resume_rule", operations.resume_rule, RULE_MUTATIONS,
+             scopes=("automations:write",), step=_fixed("Resumed the automation")),
     # ── other plugins' actions ────────────────────────────────────────────
     ToolSpec("invoke_plugin_action", plugin_actions.invoke_plugin_action, PLUGIN_ACTIONS,
              scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
     ToolSpec("await_streaming_plugin_action", plugin_actions.await_streaming_plugin_action,
              PLUGIN_ACTIONS, scopes=("plugins:write",), step=_fixed("Ran the plugin action")),
+    ToolSpec("plugin_control", operations.plugin_control, PLUGIN_ACTIONS,
+             scopes=("plugins:write",),
+             step=lambda a, _r: {"start": "Started", "stop": "Stopped"}.get(
+                 a.get("op"), "Restarted") + " the plugin"),
+    ToolSpec("set_plugin_log_level", operations.set_plugin_log_level, PLUGIN_ACTIONS,
+             scopes=("plugins:write",), step=_fixed("Changed the plugin's log level")),
 )  # fmt: skip
 
 BY_NAME = {t.name: t for t in TOOLS}

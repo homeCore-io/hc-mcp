@@ -34,7 +34,7 @@ from typing import Any
 import httpx
 import jsonschema
 
-from . import guides, registry
+from . import guides, registry, security
 from .chats import Chat
 from .provider import MAX_TOKENS, REFUSAL, Canceled, Provider, ProviderError, ToolCall
 from .registry import ToolSpec
@@ -533,49 +533,17 @@ class Turn:
 
     # ── security ──────────────────────────────────────────────────────────
 
-    async def _security_devices(self) -> dict[str, dict]:
-        from .server_state import client
-
-        devices = await client().list_devices()
-        return {d.get("device_id"): d for d in devices if house.is_security(d)}
-
     async def _security_refusal(self, spec: ToolSpec, args: dict) -> str | None:
         """Words refusing *spec* when it would touch a security device and
         that is not allowed; ``None`` when it may go ahead."""
         if self.settings.security:
             return None
-        from .server_state import client
-
-        touched: set[str] = set()
-        if spec.name in ("command_device", "bulk_command", "run_scene") or spec.name in (
-            "create_rule",
-            "update_rule",
-            "delete_rule",
-            "enable_rule",
-            "disable_rule",
-        ):
-            secure = await self._security_devices()
-            if not secure:
-                return None
-            if spec.name == "command_device":
-                touched = {args.get("device_id")} & secure.keys()
-            elif spec.name == "bulk_command":
-                touched = {e.get("device_id") for e in args.get("commands", [])} & secure.keys()
-            elif spec.name == "run_scene":
-                scenes = await client().list_scenes()
-                scene = next((s for s in scenes if s.get("id") == args.get("scene_id")), None)
-                touched = set((scene or {}).get("states", {})) & secure.keys()
-            else:
-                rule = args.get("rule")
-                if rule is None and args.get("rule_id"):
-                    try:
-                        rule = await client().get_automation(args["rule_id"])
-                    except httpx.HTTPError:
-                        rule = None
-                touched = _strings_in(rule) & secure.keys()
-            if touched:
-                names = ", ".join(sorted(house.device_label(secure[i]) for i in touched))
-                return SECURITY_REFUSAL.format(names=names)
+        try:
+            names = await security.touched(spec.name, args)
+        except httpx.HTTPError:
+            return "Not done: homeCore didn't answer when asked what this would touch."
+        if names:
+            return SECURITY_REFUSAL.format(names=", ".join(names))
         return None
 
     # ── confirm ───────────────────────────────────────────────────────────
@@ -640,6 +608,28 @@ class Turn:
             if danger:
                 go["danger"] = True
             return {"type": "plain", "title": f"{verb} {name}"}, [cancel, go]
+        plain = {
+            "acknowledge_alert": ("Acknowledge the alert", "Acknowledge"),
+            "resume_rule": ("Resume the paused automation", "Resume it"),
+            "room_lights": (
+                f"Turn the room's lights {'on' if args.get('on') else 'off'}",
+                "Do it",
+            ),
+            "plugin_control": (
+                f"{str(args.get('op', 'restart')).capitalize()} {args.get('plugin_id', 'the plugin')}",
+                str(args.get("op", "restart")).capitalize(),
+            ),
+            "set_plugin_log_level": (
+                f"Set {args.get('plugin_id', 'the plugin')}'s log level to {args.get('level')}",
+                "Set it",
+            ),
+        }
+        if spec.name in plain:
+            title, label = plain[spec.name]
+            return {"type": "plain", "title": title}, [
+                cancel,
+                {"id": "go", "label": label, "primary": True},
+            ]
         # Another plugin's action.
         title = f"Run {args.get('action', 'an action')} on {args.get('plugin_id', 'a plugin')}"
         return (
@@ -715,23 +705,6 @@ def _rule_id(spec: ToolSpec, args: dict, result: Any) -> str | None:
     if spec.name in ("update_rule", "enable_rule", "disable_rule"):
         return args.get("rule_id")
     return None
-
-
-def _strings_in(value: Any) -> set[str]:
-    """Every string anywhere in *value*: how an automation's devices are
-    found without knowing every trigger and action's shape."""
-    out: set[str] = set()
-    stack = [value]
-    while stack:
-        v = stack.pop()
-        if isinstance(v, str):
-            out.add(v)
-        elif isinstance(v, dict):
-            stack.extend(v.keys())
-            stack.extend(v.values())
-        elif isinstance(v, list):
-            stack.extend(v)
-    return out
 
 
 def _compact_device(d: dict) -> dict:

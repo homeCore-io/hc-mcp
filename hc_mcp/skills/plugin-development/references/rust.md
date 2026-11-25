@@ -87,11 +87,11 @@ use tracing::{error, info, warn};
 
 #[derive(Deserialize)]
 struct Config {
-    homecore: HomeCore,
+    homecore: homeCore,
 }
 
 #[derive(Deserialize)]
-struct HomeCore {
+struct homeCore {
     #[serde(default = "localhost")]
     broker_host: String,
     #[serde(default = "mqtt_port")]

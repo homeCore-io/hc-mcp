@@ -19,6 +19,7 @@ import time
 
 import httpx
 
+from ..security import is_read_only
 from ..server_state import client
 
 WRITE_CATEGORY = "plugin_actions"
@@ -32,7 +33,9 @@ async def list_plugin_actions() -> list[dict]:
     """Every plugin-declared action across the system, flattened.
 
     Returns a list of ``{plugin_id, action_id, label, description,
-    params, requires_role, stream, cancelable, timeout_ms}`` rows.
+    params, requires_role, read_only, stream, cancelable, timeout_ms}``
+    rows. A ``read_only`` action only reads: run it with
+    ``query_plugin_action``, which needs no write permission.
     Use this BEFORE ``invoke_plugin_action`` to learn which actions
     exist and what params each accepts.
 
@@ -57,6 +60,7 @@ async def list_plugin_actions() -> list[dict]:
                     "description": action.get("description"),
                     "params": action.get("params"),
                     "requires_role": action.get("requires_role", "user"),
+                    "read_only": is_read_only(action),
                     "stream": action.get("stream", False),
                     "cancelable": action.get("cancelable", False),
                     "timeout_ms": action.get("timeout_ms"),
@@ -114,7 +118,40 @@ async def invoke_plugin_action(
             f"result."
         )
 
+    if is_read_only(match):
+        # Core answers these on /query for anyone who can read devices;
+        # /command would need plugins:write for no reason.
+        return await c.query_plugin(plugin_id, action, params)
     return await c.send_plugin_command(plugin_id, action, params)
+
+
+async def query_plugin_action(
+    plugin_id: str,
+    action: str,
+    params: dict | None = None,
+) -> dict:
+    """Run a plugin action that only reads, such as listing what a bridge
+    found or checking a connection.
+
+    Only for actions ``list_plugin_actions`` marks ``read_only``; others
+    are refused, and go through ``invoke_plugin_action``. Needs only
+    permission to read devices, and is not write-gated."""
+    c = client()
+    try:
+        caps = await c.get_plugin_capabilities(plugin_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise RuntimeError(
+                f"Plugin '{plugin_id}' has not published a capability manifest"
+            ) from e
+        raise
+    match = next((a for a in caps.get("actions", []) if a.get("id") == action), None)
+    if match is None or not is_read_only(match):
+        raise RuntimeError(
+            f"'{action}' is not a read-only action of plugin '{plugin_id}'. "
+            f"list_plugin_actions says which are; others go through invoke_plugin_action."
+        )
+    return await c.query_plugin(plugin_id, action, params)
 
 
 async def await_streaming_plugin_action(
