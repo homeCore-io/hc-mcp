@@ -17,7 +17,14 @@ import httpx
 from .tools import house
 
 #: Tools that change an automation, which touches whatever the rule names.
-RULE_TOOLS = ("create_rule", "update_rule", "delete_rule", "enable_rule", "disable_rule")
+RULE_TOOLS = (
+    "create_rule",
+    "update_rule",
+    "delete_rule",
+    "enable_rule",
+    "disable_rule",
+    "resume_rule",
+)
 #: Tools that run another plugin's action.
 PLUGIN_ACTION_TOOLS = ("invoke_plugin_action", "await_streaming_plugin_action")
 
@@ -65,13 +72,17 @@ async def touched(tool: str, args: dict) -> list[str]:
         scene = next((s for s in scenes if s.get("id") == args.get("scene_id")), None)
         ids = set((scene or {}).get("states", {})) & secure.keys()
     elif tool in RULE_TOOLS:
-        rule = args.get("rule")
-        if rule is None and args.get("rule_id"):
+        ids = strings_in(args.get("rule"))
+        if args.get("rule_id"):
+            # The rule as it is too: an update that leaves the lock out still
+            # changes what happens to the lock. A lookup that fails for any
+            # reason but a missing rule raises, rather than letting it pass.
             try:
-                rule = await c.get_automation(args["rule_id"])
-            except httpx.HTTPError:
-                rule = None
-        ids = strings_in(rule) & secure.keys()
+                ids |= strings_in(await c.get_automation(args["rule_id"]))
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code != 404:
+                    raise
+        ids &= secure.keys()
     elif tool in PLUGIN_ACTION_TOOLS:
         ids = await _plugin_action_touches(c, args, secure)
     return sorted(house.device_label(secure[i]) for i in ids)

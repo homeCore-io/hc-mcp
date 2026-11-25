@@ -538,7 +538,10 @@ class Turn:
         that is not allowed; ``None`` when it may go ahead."""
         if self.settings.security:
             return None
-        names = await security.touched(spec.name, args)
+        try:
+            names = await security.touched(spec.name, args)
+        except httpx.HTTPError:
+            return "Not done: homeCore didn't answer when asked what this would touch."
         if names:
             return SECURITY_REFUSAL.format(names=", ".join(names))
         return None

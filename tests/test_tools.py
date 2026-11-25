@@ -10,6 +10,7 @@ import httpx
 import pytest
 from fakes import FakeHomeCore
 
+from hc_mcp import security
 from hc_mcp.registry import BY_NAME
 from hc_mcp.server_state import using_client
 from hc_mcp.tools import (
@@ -161,6 +162,40 @@ def test_query_plugin_action_only_runs_read_only_actions():
             run(plugin_actions.query_plugin_action("plugin.alarm", "disarm"))
     assert hc.queried == [("plugin.alarm", "status")]
     assert not BY_NAME["query_plugin_action"].mutates
+
+
+class RuleHomeCore(ToolHomeCore):
+    """Holds one automation that locks the front door."""
+
+    lookup_status = 200
+
+    async def get_automation(self, rule_id: str) -> dict:
+        if self.lookup_status != 200:
+            raise _status(self.lookup_status, f"/automations/{rule_id}")
+        return {"id": rule_id, "actions": [{"action": {"SetDeviceState": {
+            "device_id": "lock.front", "state": {"locked": True}}}}]}  # fmt: skip
+
+
+def test_resuming_or_rewriting_a_lock_automation_counts_for_security():
+    hc = RuleHomeCore()
+    without = {"name": "Lock up", "actions": []}
+    with using_client(hc):
+        assert run(security.touched("resume_rule", {"rule_id": "r"})) == ["Front door lock"]
+        # The new body leaves the lock out; the automation it replaces doesn't.
+        assert run(security.touched("update_rule", {"rule_id": "r", "rule": without})) == [
+            "Front door lock"
+        ]
+        assert run(security.touched("create_rule", {"rule": without})) == []
+
+
+def test_a_rule_that_cannot_be_looked_up_is_not_let_through():
+    hc = RuleHomeCore()
+    with using_client(hc):
+        hc.lookup_status = 404
+        assert run(security.touched("enable_rule", {"rule_id": "r"})) == []
+        hc.lookup_status = 503
+        with pytest.raises(httpx.HTTPStatusError):
+            run(security.touched("enable_rule", {"rule_id": "r"}))
 
 
 # ── commands ──────────────────────────────────────────────────────────────
