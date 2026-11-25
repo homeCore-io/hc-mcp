@@ -62,9 +62,9 @@ users and keys); add it with `--scopes` if hc-mcp should read logs.
 | `bulk_command` | `device_commands` | Fan out commands across many devices, 8 at a time; per-device success reported |
 | `run_scene` | `device_commands` | POST `/scenes/:id/activate` |
 | `acknowledge_alert` | `device_commands` | POST `/alerts/:id/acknowledge` — marks it seen; it stays until it clears |
-| `room_lights` | `device_commands` | POST `/areas/:id/on|off` — a room's lights only, restored as they were |
+| `room_lights` | `device_commands` | POST `/areas/:id/on` or `/off` — a room's lights only, restored as they were |
 | `resume_rule` | `rule_mutations` | DELETE `/automations/:id/pause` — undo another automation's pause |
-| `plugin_control` | `plugin_actions` | POST `/plugins/:id/start|stop|restart` (plugins homeCore runs) |
+| `plugin_control` | `plugin_actions` | POST `/plugins/:id/start`, `/stop` or `/restart` (plugins homeCore runs) |
 | `set_plugin_log_level` | `plugin_actions` | PATCH `/plugins/:id` `log_level` — lasts; put it back after debugging |
 | `enable_rule` / `disable_rule` | `rule_mutations` | PATCH `/automations/:id` to flip the enabled flag |
 | `delete_rule` | `rule_mutations` | DELETE `/automations/:id` — permanent; read it first if it might be wanted again |
