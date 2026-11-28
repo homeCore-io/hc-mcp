@@ -144,14 +144,14 @@ class FakeHomeCore:
     # (silly, but it is how the security gate is checked).
     rotations: ClassVar[list[dict]] = [
         {
-            "id": "rot-lamp",
+            "id": "0b5a1f1e-0000-4000-8000-00000000a1a1",
             "name": "Lamp moods",
             "device_id": "light.lamp",
             "choices": [{"command": {"action": "apply_preset", "preset_id": 1}}],
             "now": {"current_name": "Warm", "next_name": "Cool", "missing_names": []},
         },
         {
-            "id": "rot-lock",
+            "id": "0b5a1f1e-0000-4000-8000-00000000b2b2",
             "name": "Lock codes",
             "device_id": "lock.front",
             "choices": [{"command": {"action": "set_code", "code": 1}}],
