@@ -1,6 +1,6 @@
 ---
 name: plugin-development
-description: Guides writing, testing and releasing a homeCore plugin in Rust, Python, JavaScript (Node) or .NET. Covers registering devices with a schema, the shared device vocabulary (names and units), commands, plugin actions (immediate and streaming, requires_role including signed_in, the verified caller), settings forms, notices and alerts, the plugin's own REST access (api_scopes and api_access), plugin screens and cards (ui/ folder, slots, the host API), files sent to actions, testing on a sandbox with stand-in devices, and CI and releases to the plugin registry (signed index, Python runtime artifacts). Use when someone asks to write a homeCore plugin, add a device type or attribute, add a plugin action, build a plugin screen or card, debug a plugin that hangs or dies, or release a plugin.
+description: Guides writing, testing and releasing a homeCore plugin in Rust, Python, JavaScript (Node) or .NET. Covers registering devices with a schema, the shared device vocabulary (names and units), commands, plugin actions (immediate and streaming, requires_role including signed_in, the verified caller), settings forms, notices and alerts, the plugin's own REST access (api_scopes and api_access), plugin screens and cards (ui/ folder, slots, the host API), files sent to actions, testing on a sandbox with stand-in devices, and CI and releases to the plugin registry (signed index, Python runtime artifacts). Use when someone asks to write a homeCore plugin, contribute one or change an SDK, add a device type or attribute, add a plugin action, build a plugin screen or card, debug a plugin that hangs or dies, or release a plugin.
 license: MIT OR Apache-2.0
 ---
 
@@ -25,7 +25,7 @@ types in `crates/hc-types` of the [homeCore repository](https://github.com/homeC
 |---|---|---|---|
 | Rust | `plugin-sdk-rs`, in the homeCore repo at `sdk/rust` | yes, native binary | [references/rust.md](references/rust.md) |
 | Python | `homecore-plugin-sdk` ([hc-plugin-sdk-py](https://github.com/homeCore-io/hc-plugin-sdk-py)) | yes, runs in a plugin runtime | [references/python.md](references/python.md) |
-| JavaScript | `homecore-plugin-sdk` ([hc-plugin-sdk-js](https://github.com/homeCore-io/hc-plugin-sdk-js)) | not yet | [references/javascript.md](references/javascript.md) |
+| JavaScript | `homecore-plugin-sdk` ([hc-plugin-sdk-js](https://github.com/homeCore-io/hc-plugin-sdk-js)) | yes, runs in a plugin runtime (pure JavaScript) | [references/javascript.md](references/javascript.md) |
 | .NET | `HomeCore.PluginSdk` ([hc-plugin-sdk-dotnet](https://github.com/homeCore-io/hc-plugin-sdk-dotnet)) | not yet | [references/dotnet.md](references/dotnet.md) |
 
 Nothing is published to crates.io, PyPI, npm or NuGet. Install each SDK from
@@ -34,10 +34,11 @@ SDK's README for the current install method. Each language reference has a
 minimal working plugin, a table of the SDK's names for every concept below,
 and how to run and test it.
 
-Only Rust has files sent to actions, pictures the plugin keeps
-(`with_files_dir`), async action handlers, and reading other devices'
-availability and schemas. Choose Rust or Python if the plugin must be
-installable from the Catalog.
+Only Rust has pictures the plugin keeps (`with_files_dir`), async action
+handlers, and reading other devices' availability and schemas. Rust and
+JavaScript (SDK 0.4.7) take files sent to actions. .NET has no release path to
+the Catalog: choose Rust, Python or JavaScript if the plugin must be
+installable from it.
 
 ## 2. Start from a working plugin
 
@@ -106,6 +107,21 @@ read config (argv[1]) → logging → connect → enable management
    `{"action": "toggle", ...}`. Hand slow device I/O to a worker so it
    never stalls the MQTT loop. Publish what the device confirms, with the
    SDK's `_for_command` variant so the change records its cause.
+
+Registration is not retained: every device shares the plugin's one `register`
+topic, and a broker keeps only the last retained message per topic. Register
+again on every reconnect instead (the SDKs do).
+
+**Removing devices.** A device stays in homeCore until the plugin unregisters
+it, and a plugin unregister is a hard delete: no undo, and rules that name the
+device keep a dead reference. So retire a device only on an authoritative
+answer that it is gone: the hub's own inventory after a complete, successful
+read (Rust: `with_device_persistence` plus `reconcile_devices(live)`). Silence
+is not that answer. A sensor with a flat battery is silent too, and removing
+it loses its room and breaks its rules. If the source can only say what it
+heard, never reconcile against that; find the inventory it keeps (hc-ecowitt
+reads the gateway's paired-sensor slots and waits a day) or leave removal to
+the person, in Settings › Devices.
 
 State rules: never publish a value that changes by itself on every refresh
 (uptime, a clock), since every publish is a state-changed event. Publish
@@ -247,11 +263,52 @@ the `host` API, building, and the gotchas.
 Rust plugins call the shared `rust-ci.yml`; every caller needs
 `permissions: {contents: read, issues: write}`. A release is one tag after
 CI is green: `hc-<name>-v<version>` for a plugin in the homeCore repository,
-`v<version>` for a Python plugin in its own repository. The shared workflow
-builds the package (a static binary plus `ui/`, or a Python wheelhouse),
-attaches it to a GitHub Release and notifies the registry, whose signed index
-homeCore installs from. Catalog name, category and description come from the
-package metadata. Read [references/releasing.md](references/releasing.md).
+`v<version>` for a Python or Node.js plugin in its own repository. The shared
+workflow builds the package (a static binary plus `ui/`, a Python wheelhouse,
+or a Node.js app with its `node_modules`), starts it against a broker, attaches
+it to a GitHub Release and notifies the registry, whose signed index homeCore
+installs from. Catalog name, category and description come from the package
+metadata. Read [references/releasing.md](references/releasing.md).
+
+## 11. Contributing a plugin, or a change to an SDK
+
+A plugin can run in four places. Prefer the first two.
+
+| Where | Language | Catalog |
+|---|---|---|
+| In the homeCore repository (`plugins/hc-<name>`), started by homeCore | Rust | yes, released by maintainers |
+| In a plugin runtime, from its own repository | Python, Node.js | once a maintainer lists it |
+| Its own package, started by homeCore | Rust | once listed |
+| A service run outside homeCore (a container, Kubernetes, a microcontroller) | any | no |
+
+A plugin from outside homeCore-io releases with `publish_registry: false`,
+since notifying the registry needs an organization secret, and then asks for
+a listing on [homeCore-io/registry](https://github.com/homeCore-io/registry/issues).
+
+A service outside homeCore connects with a `[[broker.clients]]` login whose
+`id` is its plugin id, keeps its own settings (homeCore holds no config file
+for it), sets a Last Will, and appears under Settings › Plugins once it sends
+a heartbeat. Use an SDK for it if you can.
+
+**An SDK change has to work for every plugin**, not the one deployment it was
+written for: many devices as well as one; started by homeCore, in a runtime
+or on its own.
+
+- A new way to send something sends what the existing call sends. A
+  heartbeat carries `sdk_version`, `device_count` and the rest core reads; a
+  capability manifest goes through the manifest builder, so the settings
+  schema, descriptor, alert kinds and screens aren't dropped (and since it is
+  retained, a thin one replaces the full one).
+- The protocol (topics, payloads, what is retained) is shared by every plugin
+  and homeCore. Change it only after an issue agrees.
+- Respect the caller's options: don't quietly override what they set (a
+  clean session, a keep-alive).
+- In async Rust, never hold a lock or a `watch::Ref` across an `.await`:
+  bind the value to a local first.
+- Test the new calls, say which plugins use them, and say whether the other
+  SDKs need the same change.
+
+See [Contributing](https://homecore.io/docs/development/contributing#contributing-a-plugin).
 
 ## The rules most often broken
 
@@ -284,6 +341,8 @@ package metadata. Read [references/releasing.md](references/releasing.md).
       options; device actions have sentences.
 - [ ] Shared names and units, converted at the edge, tested at both ends.
 - [ ] Nothing it publishes changes by itself every refresh.
+- [ ] It removes a device only when the source's own inventory says it is
+      gone, never because it went quiet.
 - [ ] Settings have a schema and a descriptor (and, in Rust, the coverage
       test passes).
 - [ ] Alerts are current state; news is `default_on: false`.
@@ -300,3 +359,4 @@ package metadata. Read [references/releasing.md](references/releasing.md).
 - [Plugin Screens and Cards](https://homecore.io/docs/plugins/plugin-screens)
 - [Alerts from Plugins](https://homecore.io/docs/plugins/plugin-alerts)
 - [Plugin Runtimes](https://homecore.io/docs/plugins/runtimes)
+- [Contributing](https://homecore.io/docs/development/contributing): the ways to contribute a plugin, getting listed, and running your own registry

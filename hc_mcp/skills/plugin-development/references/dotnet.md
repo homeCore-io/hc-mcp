@@ -1,7 +1,7 @@
 # .NET plugins
 
 Read this when the plugin is in C#. The SDK is the project `HomeCoreSdk.csproj`,
-namespace `HomeCore.PluginSdk` (0.4.5 at the time of writing), targeting
+namespace `HomeCore.PluginSdk` (0.4.6 at the time of writing), targeting
 `net8.0`, built on MQTTnet 4. Source:
 [hc-plugin-sdk-dotnet](https://github.com/homeCore-io/hc-plugin-sdk-dotnet).
 
@@ -17,7 +17,7 @@ and reference the project. Check the SDK's README for the current method
 first:
 
 ```bash
-git clone --branch v0.4.5 https://github.com/homeCore-io/hc-plugin-sdk-dotnet
+git clone --branch v0.4.6 https://github.com/homeCore-io/hc-plugin-sdk-dotnet
 dotnet new console -o hc-demo-dotnet        # outside the SDK folder
 cd hc-demo-dotnet
 dotnet add reference ../hc-plugin-sdk-dotnet/HomeCoreSdk.csproj

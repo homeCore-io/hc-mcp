@@ -1,15 +1,16 @@
 # JavaScript (Node.js) plugins
 
 Read this when the plugin is in JavaScript. The SDK is the package
-`homecore-plugin-sdk` (0.4.5 at the time of writing), CommonJS, Node 18 or
+`homecore-plugin-sdk` (0.4.7 at the time of writing), CommonJS, Node 18 or
 newer, with `mqtt` as its only dependency. Source:
 [hc-plugin-sdk-js](https://github.com/homeCore-io/hc-plugin-sdk-js). It ships
 JSDoc, no TypeScript types.
 
-**Releasing:** there is no release workflow, artifact format or runtime for
-Node plugins yet, so a Node plugin cannot be published to the Catalog today.
-You can write and run one against a homeCore you control. If you need the
-Catalog, write the plugin in Rust or Python.
+**Releasing:** a Node plugin reaches the Catalog as a pure-JavaScript package
+for the Node.js plugin runtime, built by hc-scripts' `node-release.yml` from
+a `homecore` block in `package.json`. See
+[releasing.md](releasing.md#releasing-a-nodejs-plugin); hc-matter is the
+working example.
 
 ## Install
 
@@ -17,13 +18,13 @@ Nothing is on npm. Install from the GitHub repository at a tag, and check the
 SDK's README for the current method first:
 
 ```bash
-npm install github:homeCore-io/hc-plugin-sdk-js#v0.4.5
+npm install github:homeCore-io/hc-plugin-sdk-js#v0.4.7
 npm install smol-toml        # the SDK has no TOML parser
 ```
 
 With both repositories cloned side by side, `npm install ../hc-plugin-sdk-js`
 links a local checkout instead. `caller`, `signed_in`, `apiScopes` and
-`api_access` need 0.4.5 or newer.
+`api_access` need 0.4.5 or newer; files sent to actions need 0.4.7.
 
 ## A minimal plugin
 
@@ -235,8 +236,9 @@ Things the SDK leaves to you:
 | Logs | `enableLogForwarding('info')`, then `logInfo/logWarn/logError(msg, fields)` |
 | Other devices | `subscribeState(id)` with `onState(deviceId, state)` |
 
-Files sent to actions, pictures the plugin keeps and async action handlers
-are Rust only. The `set_log_level` management action is accepted but has no
+Pictures the plugin keeps and async action handlers are Rust only. A file
+sent to an action (0.4.7) reaches the action as a local `file_path` param, as
+in Rust, and is removed once the action replies. The `set_log_level` management action is accepted but has no
 effect in this SDK.
 
 ## Run and test

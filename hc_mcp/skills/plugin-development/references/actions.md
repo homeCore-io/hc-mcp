@@ -180,14 +180,16 @@ Every SDK answers `api_access` for you and keeps the access (Rust
 custom handler that still answers `api_access` keeps working: the SDK keeps
 the grant first, and that handler's reply is what core gets.
 
-## Files sent to an action (Rust only)
+## Files sent to an action (Rust, and JavaScript from SDK 0.4.7)
 
 `POST /plugins/{id}/upload/{action}` sends a file of up to 32 MiB to one of
 the manifest's actions. The SDK receives it in pieces and runs the action
 with a local `file_path` param, then removes the file once the action has
 replied. Copy it first if a streaming action keeps working after replying.
 From a screen: `host.upload(action, file, params)`; the params arrive as
-strings. Example: hc-wled's `install_firmware_file`.
+strings. A file that didn't arrive whole fails the action before your
+handler runs. Examples: hc-wled's `install_firmware_file` (Rust) and
+hc-matter's `restore_backup` (JavaScript).
 
 ## Checks
 
