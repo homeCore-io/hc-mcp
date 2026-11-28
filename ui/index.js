@@ -882,7 +882,7 @@ class McpSettings extends HTMLElement {
 					<h2>Use from Claude Desktop or Claude Code</h2>
 					<span class="hint" style="font-size:14px">The same tools work in any app that speaks MCP. Run hc-mcp on that computer and sign it in with your own API key.</span>
 					<code>hc-mcp setup --base-url ${esc(base)}</code>
-					<a href="https://github.com/homeCore-io/hc-mcp#readme" target="_blank" rel="noopener">How to set it up</a>
+					<a href="https://homecore-io.github.io/docs/tools/hc-mcp#the-mcp-server" target="_blank" rel="noopener">How to set it up</a>
 				</section>
 			</div>`;
 	}
