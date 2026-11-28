@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable
@@ -40,6 +41,8 @@ from .provider import MAX_TOKENS, REFUSAL, Canceled, Provider, ProviderError, To
 from .registry import ToolSpec
 from .settings import Settings
 from .tools import house
+
+log = logging.getLogger(__name__)
 
 #: Rounds of tool calls in one reply before the loop gives up.
 MAX_ROUNDS = 12
@@ -383,6 +386,14 @@ class Turn:
                         should_stop=self.ctx.is_canceled,
                     )
                 except ProviderError as exc:
+                    # Said to the person only, this left nothing to find out
+                    # why a chat stopped.
+                    log.warning(
+                        "chat: Claude call failed at step %d (%s): %s",
+                        round_no + 1,
+                        exc.reason,
+                        exc,
+                    )
                     if round_no == 0:
                         # Nothing happened: leave the conversation as it was,
                         # so the next message is not answered twice.
@@ -422,6 +433,7 @@ class Turn:
                 if self.ctx.is_canceled():
                     raise Canceled()
             else:
+                log.warning("chat: stopped after %d steps", MAX_ROUNDS)
                 self.stream.notice("I stopped after too many steps. Try asking a smaller question.")
         except Canceled:
             stopped = "canceled"
@@ -490,6 +502,7 @@ class Turn:
         try:
             result = await spec.fn(**args)
         except Exception as exc:  # noqa: BLE001 - told to the model and the person
+            log.warning("chat: %s failed: %s", spec.name, _failure(exc))
             self.stream.add({**decided, "outcome": "failed", "text": _failure(exc)})
             return (call.id, f"It failed: {_failure(exc)}", True)
         part = {**decided, "outcome": "done", "text": spec.step(args, result) if spec.step else ""}
@@ -506,6 +519,7 @@ class Turn:
         try:
             result = await spec.fn(**args)
         except Exception as exc:  # noqa: BLE001
+            log.warning("chat: %s failed: %s", spec.name, _failure(exc))
             self.stream.update(chip, state="failed", label="Couldn't look that up")
             return (call.id, f"It failed: {_failure(exc)}", True)
         self.stream.update(
@@ -726,11 +740,58 @@ def _compact_device(d: dict) -> dict:
     return out
 
 
+def _dump(v: Any) -> str:
+    return json.dumps(v, default=str, separators=(",", ":"))
+
+
 def _shape(name: str, result: Any) -> str:
-    """A tool's result as the model reads it: compact, and cut when long."""
+    """A tool's result as the model reads it: compact, and cut when long.
+
+    A list is cut at a whole entry and says how many it left out. Cut at a
+    character count, a house's device list ended a third of the way through
+    (96 of 203 devices), and the model, told only to ask for less, couldn't
+    find a camera past the cut.
+    """
     if name == "list_devices" and isinstance(result, list):
-        result = [_compact_device(d) for d in result if isinstance(d, dict)]
-    text = json.dumps(result, default=str, separators=(",", ":"))
-    if len(text) > MAX_RESULT_CHARS:
-        text = text[:MAX_RESULT_CHARS] + " ... (cut short; ask for less, e.g. one device)"
-    return text
+        devices = [_compact_device(d) for d in result if isinstance(d, dict)]
+        text = _dump(devices)
+        if len(text) <= MAX_RESULT_CHARS:
+            return text
+        # Every device by name, room and type, rather than half with their
+        # attributes: enough to find one, then read it with device_state.
+        result = {
+            "note": (
+                f"All {len(devices)} devices, without their attributes: too many to show "
+                "whole. device_state reads one; list_devices with query, room or "
+                "device_type narrows the list."
+            ),
+            "devices": [{k: v for k, v in d.items() if k != "attributes"} for d in devices],
+        }
+    text = _dump(result)
+    if len(text) <= MAX_RESULT_CHARS:
+        return text
+    if isinstance(result, list):
+        return _cut_list(result, "")
+    if isinstance(result, dict) and isinstance(result.get("devices"), list):
+        return _cut_list(result["devices"], result.get("note", ""))
+    return text[:MAX_RESULT_CHARS] + " ... (cut short; ask for less, e.g. one device)"
+
+
+def _cut_list(items: list, note: str) -> str:
+    """As many whole entries as fit, and how many were left out."""
+    kept: list[str] = []
+    size = 0
+    for item in items:
+        part = _dump(item)
+        if size + len(part) + 1 > MAX_RESULT_CHARS - 300:
+            break
+        kept.append(part)
+        size += len(part) + 1
+    said = (
+        f"The first {len(kept)} of {len(items)}; the rest were left out. "
+        "Ask for fewer (a filter, or one by id) to see them."
+    )
+    head = f"{note} {said}".strip()
+    return _dump({"note": head, "items": "__ITEMS__"}).replace(
+        '"__ITEMS__"', "[" + ",".join(kept) + "]"
+    )

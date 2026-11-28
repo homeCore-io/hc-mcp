@@ -117,6 +117,10 @@ class AnthropicProvider:
             "system": system,
             "messages": messages,
         }
+        # Each step sends the whole chat again, tool results and all. Cached,
+        # a long look-up costs far less, and cached reads count far less
+        # against the key's per-minute input limit.
+        req["cache_control"] = {"type": "ephemeral"}
         if tools:
             req["tools"] = tools
         # Chat about a house wants quick, plain answers. Haiku 4.5 takes no
