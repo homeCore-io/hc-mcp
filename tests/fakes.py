@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import httpx
 
@@ -138,6 +139,35 @@ class FakeHomeCore:
 
     async def list_scenes(self) -> list[dict]:
         return self.scenes
+
+    # Rotations (homeCore 0.1.130): one for the floor lamp, one for the lock
+    # (silly, but it is how the security gate is checked).
+    rotations: ClassVar[list[dict]] = [
+        {
+            "id": "rot-lamp",
+            "name": "Lamp moods",
+            "device_id": "light.lamp",
+            "choices": [{"command": {"action": "apply_preset", "preset_id": 1}}],
+            "now": {"current_name": "Warm", "next_name": "Cool", "missing_names": []},
+        },
+        {
+            "id": "rot-lock",
+            "name": "Lock codes",
+            "device_id": "lock.front",
+            "choices": [{"command": {"action": "set_code", "code": 1}}],
+        },
+    ]
+
+    async def list_rotations(self) -> list[dict]:
+        return self.rotations
+
+    async def play_rotation(self, rotation_id: str, device_id: str | None = None) -> dict:
+        self.commands.append((rotation_id, {"action": "play", "device_id": device_id}))
+        return {"played": "Warm", "index": 0, "device_id": device_id or "light.lamp", "missing": []}
+
+    async def advance_rotation(self, rotation_id: str) -> dict:
+        self.commands.append((rotation_id, {"action": "advance"}))
+        return {"current": 1, "current_name": "Cool", "missing": []}
 
     async def activate_scene(self, scene_id: str) -> dict:
         self.commands.append((scene_id, {"action": "activate"}))

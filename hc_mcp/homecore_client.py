@@ -98,6 +98,19 @@ class HomeCoreClient:
     async def list_scenes(self) -> list[dict]:
         return await self.get("/scenes")
 
+    async def list_rotations(self) -> list[dict]:
+        """GET /rotations (homeCore 0.1.130): each with what plays now."""
+        return await self.get("/rotations")
+
+    async def play_rotation(self, rotation_id: str, device_id: str | None = None) -> dict:
+        """POST /rotations/{id}/play: play its choice for now."""
+        body = {"device_id": device_id} if device_id else None
+        return await self.send("POST", f"/rotations/{rotation_id}/play", body)
+
+    async def advance_rotation(self, rotation_id: str) -> dict:
+        """POST /rotations/{id}/advance: move it on without playing."""
+        return await self.send("POST", f"/rotations/{rotation_id}/advance")
+
     async def list_areas(self) -> list[dict]:
         return await self.get("/areas")
 

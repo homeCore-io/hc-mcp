@@ -151,8 +151,9 @@ def system_prompt(
             "homeCore's words: devices (lights, switches, sensors, locks, thermostats; each has a "
             "device_id, a name, a room and attributes), rooms (also called areas), automations "
             "(each has triggers that start it, conditions that must hold, and actions it takes), "
-            "scenes (saved states for several devices), and modes (house-wide on/off states such "
-            "as Away or Night)."
+            "scenes (saved states for several devices), rotations (a list of presets, playlists or "
+            "favorites one device plays one at a time: play the next with play_rotation), and modes "
+            "(house-wide on/off states such as Away or Night)."
         ),
         (
             "Device attributes use one vocabulary: on, brightness_pct 0 to 100, color_temp in "

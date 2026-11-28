@@ -359,6 +359,38 @@ def test_a_scene_that_sets_a_lock_needs_security_allowed(monkeypatch):
     assert hc.commands == [("scene-night", {"action": "activate"})]
 
 
+def test_a_rotation_on_a_lock_needs_security_allowed(monkeypatch):
+    hc = ToolHomeCore()
+    monkeypatch.setenv("HC_MCP_ALLOW_WRITE", "device_commands")
+    with using_client(hc):
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(mcp_tool("play_rotation")(rotation_id="rot-lock"))
+        # Named onto the lock, a harmless rotation is gated too.
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(mcp_tool("play_rotation")(rotation_id="rot-lamp", device_id="lock.front"))
+        run(mcp_tool("play_rotation")(rotation_id="rot-lamp"))
+        run(mcp_tool("skip_rotation")(rotation_id="rot-lamp"))
+    assert hc.commands == [
+        ("rot-lamp", {"action": "play", "device_id": None}),
+        ("rot-lamp", {"action": "advance"}),
+    ]
+
+
+def test_rotations_say_what_plays_now_and_next():
+    hc = ToolHomeCore()
+    with using_client(hc):
+        got = run(mcp_tool("list_rotations")())
+    assert got[0] == {
+        "id": "rot-lamp",
+        "name": "Lamp moods",
+        "device_id": "light.lamp",
+        "choices": 1,
+        "now": "Warm",
+        "next": "Cool",
+        "missing": [],
+    }
+
+
 # ── operations ────────────────────────────────────────────────────────────
 
 

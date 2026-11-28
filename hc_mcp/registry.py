@@ -217,6 +217,8 @@ TOOLS: tuple[ToolSpec, ...] = (
              step=_count("scenes")),
     ToolSpec("list_rooms", house.list_rooms, scopes=("areas:read",),
              step=_count("rooms")),
+    ToolSpec("list_rotations", house.list_rotations, scopes=("automations:read",),
+             step=_count("rotations")),
     ToolSpec("show_devices", house.show_devices, scopes=("devices:read",), mcp=False),
     ToolSpec("suggest_replies", house.suggest_replies, mcp=False),
     # ── device commands ───────────────────────────────────────────────────
@@ -228,6 +230,14 @@ TOOLS: tuple[ToolSpec, ...] = (
              if isinstance(r, dict) else "Sent the commands"),
     ToolSpec("run_scene", house.run_scene, DEVICE_COMMANDS, scopes=("scenes:run",),
              step=_fixed("Ran the scene")),
+    ToolSpec("play_rotation", house.play_rotation, DEVICE_COMMANDS,
+             scopes=("devices:command",),
+             step=lambda _a, r: f"Playing {r.get('played')}"
+             if isinstance(r, dict) and r.get("played") else "Played the rotation"),
+    ToolSpec("skip_rotation", house.skip_rotation, DEVICE_COMMANDS,
+             scopes=("devices:command",),
+             step=lambda _a, r: f"Next is {r.get('current_name')}"
+             if isinstance(r, dict) and r.get("current_name") else "Moved the rotation on"),
     ToolSpec("acknowledge_alert", operations.acknowledge_alert, DEVICE_COMMANDS,
              scopes=("devices:command",), step=_fixed("Acknowledged the alert")),
     ToolSpec("room_lights", operations.room_lights, DEVICE_COMMANDS,

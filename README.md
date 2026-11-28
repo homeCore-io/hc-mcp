@@ -46,6 +46,7 @@ full tool inventory live in [`DESIGN.md`](DESIGN.md).
 | `plugin_runtimes` | `GET /plugin-runtimes` + `/placements` | Runtimes, their health, and which plugins run where (admin) |
 | `list_backups` | `GET /system/backups` | The scheduled backups homeCore keeps (admin) |
 | `list_scenes` / `list_rooms` | `GET /scenes`, `GET /areas` | The house's scenes and rooms, by id and name |
+| `list_rotations` | `GET /rotations` | Presets, playlists and favorites a device plays one at a time, with what plays now and next |
 
 The three log tools need an admin's key: homeCore serves logs to admins
 only, and an API key is an admin only if it holds `users:write`. The key
@@ -61,6 +62,8 @@ users and keys); add it with `--scopes` if hc-mcp should read logs.
 | `command_device` | `device_commands` | PATCH `/devices/:id/state` — turn things on/off, set brightness, lock doors, etc. |
 | `bulk_command` | `device_commands` | Fan out commands across many devices, 8 at a time; per-device success reported |
 | `run_scene` | `device_commands` | POST `/scenes/:id/activate` |
+| `play_rotation` | `device_commands` | POST `/rotations/:id/play` — the next preset or playlist, on its device or another |
+| `skip_rotation` | `device_commands` | POST `/rotations/:id/advance` — move it on without playing |
 | `acknowledge_alert` | `device_commands` | POST `/alerts/:id/acknowledge` — marks it seen; it stays until it clears |
 | `room_lights` | `device_commands` | POST `/areas/:id/on` or `/off` — a room's lights only, restored as they were |
 | `resume_rule` | `rule_mutations` | DELETE `/automations/:id/pause` — undo another automation's pause |

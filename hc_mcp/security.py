@@ -28,7 +28,14 @@ RULE_TOOLS = (
 #: Tools that run another plugin's action.
 PLUGIN_ACTION_TOOLS = ("invoke_plugin_action", "await_streaming_plugin_action")
 
-CHECKED = ("command_device", "bulk_command", "run_scene", *RULE_TOOLS, *PLUGIN_ACTION_TOOLS)
+CHECKED = (
+    "command_device",
+    "bulk_command",
+    "run_scene",
+    "play_rotation",
+    *RULE_TOOLS,
+    *PLUGIN_ACTION_TOOLS,
+)
 
 
 def strings_in(value: Any) -> set[str]:
@@ -71,6 +78,14 @@ async def touched(tool: str, args: dict) -> list[str]:
         scenes = await c.list_scenes()
         scene = next((s for s in scenes if s.get("id") == args.get("scene_id")), None)
         ids = set((scene or {}).get("states", {})) & secure.keys()
+    elif tool == "play_rotation":
+        # The device it plays on: the one named, else the rotation's own.
+        device = args.get("device_id")
+        if not device:
+            rotations = await c.list_rotations()
+            rotation = next((r for r in rotations if r.get("id") == args.get("rotation_id")), None)
+            device = (rotation or {}).get("device_id")
+        ids = {device} & secure.keys()
     elif tool in RULE_TOOLS:
         ids = strings_in(args.get("rule"))
         if args.get("rule_id"):
