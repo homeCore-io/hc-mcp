@@ -106,6 +106,8 @@ def test_text_streams_and_tool_calls_come_back():
     assert req["model"] == "claude-sonnet-5-5"
     assert req["tools"] == [{"name": "list_devices"}]
     assert req["output_config"] == {"effort": "low"}
+    # Cached: every step sends the whole chat again.
+    assert req["cache_control"] == {"type": "ephemeral"}
 
 
 def test_haiku_gets_no_effort_setting():

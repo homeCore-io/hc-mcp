@@ -447,3 +447,20 @@ def test_operations_are_write_gated(monkeypatch):
     with using_client(hc), pytest.raises(PermissionError, match="plugin_actions"):
         run(mcp_tool("plugin_control")(plugin_id="plugin.hue", op="restart"))
     assert hc.sent_raw == []
+
+
+def test_list_devices_narrows_by_words_room_and_type():
+    hc = ToolHomeCore()
+    hc.devices = [
+        {"device_id": "reolink_driveway", "name": "Driveway", "device_type": "camera",
+         "area": "Outside"},
+        {"device_id": "reolink_garage", "name": "Garage", "device_type": "camera"},
+        {"device_id": "lutron_30", "name": "Flood", "device_type": "switch", "area": "Outside"},
+    ]  # fmt: skip
+    with using_client(hc):
+        ids = lambda **kw: [d["device_id"] for d in run(mcp_tool("list_devices")(**kw))]
+        assert ids(query="driveway camera") == ["reolink_driveway"]
+        assert ids(query="cameras") == ["reolink_driveway", "reolink_garage"]
+        assert ids(room="outside") == ["reolink_driveway", "lutron_30"]
+        assert ids(device_type="switch") == ["lutron_30"]
+        assert len(ids()) == 3
