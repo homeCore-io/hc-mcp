@@ -359,6 +359,52 @@ def test_a_scene_that_sets_a_lock_needs_security_allowed(monkeypatch):
     assert hc.commands == [("scene-night", {"action": "activate"})]
 
 
+def test_a_rotation_on_a_lock_needs_security_allowed(monkeypatch):
+    hc = ToolHomeCore()
+    monkeypatch.setenv("HC_MCP_ALLOW_WRITE", "device_commands")
+    with using_client(hc):
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(mcp_tool("play_rotation")(rotation_id="0b5a1f1e-0000-4000-8000-00000000b2b2"))
+        # Named onto the lock, a harmless rotation is gated too.
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(
+                mcp_tool("play_rotation")(
+                    rotation_id="0b5a1f1e-0000-4000-8000-00000000a1a1", device_id="lock.front"
+                )
+            )
+        # Written in capitals (homeCore reads it all the same): still gated.
+        with pytest.raises(PermissionError, match="Front door lock"):
+            run(
+                mcp_tool("play_rotation")(
+                    rotation_id="0b5a1f1e-0000-4000-8000-00000000b2b2".upper()
+                )
+            )
+        # An id no rotation has is refused, not waved through.
+        with pytest.raises(PermissionError, match="No rotation"):
+            run(mcp_tool("play_rotation")(rotation_id="not-a-rotation"))
+        run(mcp_tool("play_rotation")(rotation_id="0b5a1f1e-0000-4000-8000-00000000a1a1"))
+        run(mcp_tool("skip_rotation")(rotation_id="0b5a1f1e-0000-4000-8000-00000000a1a1"))
+    assert hc.commands == [
+        ("0b5a1f1e-0000-4000-8000-00000000a1a1", {"action": "play", "device_id": None}),
+        ("0b5a1f1e-0000-4000-8000-00000000a1a1", {"action": "advance"}),
+    ]
+
+
+def test_rotations_say_what_plays_now_and_next():
+    hc = ToolHomeCore()
+    with using_client(hc):
+        got = run(mcp_tool("list_rotations")())
+    assert got[0] == {
+        "id": "0b5a1f1e-0000-4000-8000-00000000a1a1",
+        "name": "Lamp moods",
+        "device_id": "light.lamp",
+        "choices": 1,
+        "now": "Warm",
+        "next": "Cool",
+        "missing": [],
+    }
+
+
 # ── operations ────────────────────────────────────────────────────────────
 
 

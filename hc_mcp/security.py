@@ -10,6 +10,7 @@ and ``security`` in ``HC_MCP_ALLOW_WRITE`` for the MCP server. Both ask
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import httpx
@@ -28,7 +29,14 @@ RULE_TOOLS = (
 #: Tools that run another plugin's action.
 PLUGIN_ACTION_TOOLS = ("invoke_plugin_action", "await_streaming_plugin_action")
 
-CHECKED = ("command_device", "bulk_command", "run_scene", *RULE_TOOLS, *PLUGIN_ACTION_TOOLS)
+CHECKED = (
+    "command_device",
+    "bulk_command",
+    "run_scene",
+    "play_rotation",
+    *RULE_TOOLS,
+    *PLUGIN_ACTION_TOOLS,
+)
 
 
 def strings_in(value: Any) -> set[str]:
@@ -71,6 +79,24 @@ async def touched(tool: str, args: dict) -> list[str]:
         scenes = await c.list_scenes()
         scene = next((s for s in scenes if s.get("id") == args.get("scene_id")), None)
         ids = set((scene or {}).get("states", {})) & secure.keys()
+    elif tool == "play_rotation":
+        # The device it plays on: the one named, else the rotation's own.
+        device = args.get("device_id")
+        if not device:
+            # By UUID, as homeCore reads the id: an upper-case or hyphenless
+            # id matched no rotation here, so the gate saw no device and let
+            # a lock's rotation through.
+            want = _uuid(args.get("rotation_id"))
+            rotations = await c.list_rotations()
+            rotation = next(
+                (r for r in rotations if want is not None and _uuid(r.get("id")) == want), None
+            )
+            if rotation is None:
+                raise PermissionError(
+                    "hc-mcp: not done. No rotation has that id; list_rotations names them."
+                )
+            device = rotation.get("device_id")
+        ids = {device} & secure.keys()
     elif tool in RULE_TOOLS:
         ids = strings_in(args.get("rule"))
         if args.get("rule_id"):
@@ -86,6 +112,13 @@ async def touched(tool: str, args: dict) -> list[str]:
     elif tool in PLUGIN_ACTION_TOOLS:
         ids = await _plugin_action_touches(c, args, secure)
     return sorted(house.device_label(secure[i]) for i in ids)
+
+
+def _uuid(value: Any) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
 
 
 async def _plugin_action_touches(c: Any, args: dict, secure: dict[str, dict]) -> set[str]:

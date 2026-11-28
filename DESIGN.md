@@ -23,9 +23,9 @@ the app. The pieces:
   `device_commands`, `rule_mutations`, `plugin_actions`; `security` gates
   devices rather than tools), the homeCore scopes it needs, and the chip the
   chat shows once it ran. The MCP server registers from it under the same names
-  and schemas as before, gated by `HC_MCP_ALLOW_WRITE` as before. A few tools
-  are chat only (`list_scenes`, `run_scene`, `list_rooms`, and the screen tools
-  `show_devices` and `suggest_replies`); the log tools are MCP only, since
+  and schemas as before, gated by `HC_MCP_ALLOW_WRITE` as before. The screen
+  tools `show_devices` and `suggest_replies` are chat only (scenes, rooms and
+  rotations are on both since 2026-11-21); the log tools are MCP only, since
   homeCore serves logs to admins and the plugin's key is never one.
 - **The chat loop** (`hc_mcp/chat.py`) asks the model, runs the tools it calls,
   and asks again, at most 12 rounds. The model sees only the tools whose

@@ -93,6 +93,44 @@ async def run_scene(scene_id: str) -> dict:
     return await client().activate_scene(scene_id)
 
 
+async def list_rotations() -> list[dict]:
+    """Every rotation: a list of presets, playlists or favorites a device
+    plays one at a time ("Bathroom music", "Porch at sunset"), with what
+    plays now and next and any choice its device no longer has. Play the
+    next with ``play_rotation``; skip one with ``skip_rotation``."""
+    out = []
+    for r in await client().list_rotations():
+        now = r.get("now") or {}
+        out.append(
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "device_id": r.get("device_id"),
+                "choices": len(r.get("choices") or []),
+                "now": now.get("current_name"),
+                "next": now.get("next_name"),
+                "missing": now.get("missing_names") or [],
+            }
+        )
+    return out
+
+
+async def play_rotation(rotation_id: str, device_id: str | None = None) -> dict:
+    """Play a rotation's choice for now (from ``list_rotations``) on its
+    device, or on ``device_id``: "put some music on in the bathroom".
+
+    Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or ``all``)."""
+    return await client().play_rotation(rotation_id, device_id)
+
+
+async def skip_rotation(rotation_id: str) -> dict:
+    """Move a rotation on to its next choice without playing it ("skip
+    this one"); the next play is the new choice.
+
+    Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or ``all``)."""
+    return await client().advance_rotation(rotation_id)
+
+
 async def list_rooms() -> list[dict]:
     """Every room (area) in the house, with its id and name."""
     areas = await client().list_areas()
