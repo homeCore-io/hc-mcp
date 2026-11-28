@@ -9,10 +9,22 @@ directly so retry / error policy stays in one place.
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
 from .config import Config
+
+
+def seg(value: Any) -> str:
+    """*value* as one path segment. An id is put in a path, and httpx
+    resolves what it holds: `lamp/../lock` reached the lock, and `lock?`
+    another endpoint, past the security check, which saw no such device.
+    Slashes, `?` and `#` are encoded; `.` and `..` are refused."""
+    s = str(value)
+    if s in ("", ".", ".."):
+        raise ValueError(f"hc-mcp: not done. {s!r} isn't an id.")
+    return quote(s, safe="")
 
 
 class HomeCoreClient:
@@ -51,20 +63,20 @@ class HomeCoreClient:
         return await self.get("/plugins")
 
     async def get_plugin(self, plugin_id: str) -> dict:
-        return await self.get(f"/plugins/{plugin_id}")
+        return await self.get(f"/plugins/{seg(plugin_id)}")
 
     async def get_plugin_capabilities(self, plugin_id: str) -> dict:
-        return await self.get(f"/plugins/{plugin_id}/capabilities")
+        return await self.get(f"/plugins/{seg(plugin_id)}/capabilities")
 
     async def list_devices(self) -> list[dict]:
         return await self.get("/devices")
 
     async def get_device(self, device_id: str) -> dict:
-        return await self.get(f"/devices/{device_id}")
+        return await self.get(f"/devices/{seg(device_id)}")
 
     async def get_device_schema(self, device_id: str) -> dict | None:
         """GET /devices/{id}/schema, or ``None`` when the device declares none."""
-        resp = await self._client.get(f"/devices/{device_id}/schema")
+        resp = await self._client.get(f"/devices/{seg(device_id)}/schema")
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
@@ -79,7 +91,7 @@ class HomeCoreClient:
         limit: int | None = None,
     ) -> list[dict]:
         return await self.get(
-            f"/devices/{device_id}/history",
+            f"/devices/{seg(device_id)}/history",
             attribute=attribute,
             **{"from": from_},
             to=to,
@@ -90,10 +102,10 @@ class HomeCoreClient:
         return await self.get("/automations")
 
     async def get_automation(self, rule_id: str) -> dict:
-        return await self.get(f"/automations/{rule_id}")
+        return await self.get(f"/automations/{seg(rule_id)}")
 
     async def automation_history(self, rule_id: str, limit: int | None = None) -> list[dict]:
-        return await self.get(f"/automations/{rule_id}/history", limit=limit)
+        return await self.get(f"/automations/{seg(rule_id)}/history", limit=limit)
 
     async def list_scenes(self) -> list[dict]:
         return await self.get("/scenes")
@@ -105,18 +117,18 @@ class HomeCoreClient:
     async def play_rotation(self, rotation_id: str, device_id: str | None = None) -> dict:
         """POST /rotations/{id}/play: play its choice for now."""
         body = {"device_id": device_id} if device_id else None
-        return await self.send("POST", f"/rotations/{rotation_id}/play", body)
+        return await self.send("POST", f"/rotations/{seg(rotation_id)}/play", body)
 
     async def advance_rotation(self, rotation_id: str) -> dict:
         """POST /rotations/{id}/advance: move it on without playing."""
-        return await self.send("POST", f"/rotations/{rotation_id}/advance")
+        return await self.send("POST", f"/rotations/{seg(rotation_id)}/advance")
 
     async def list_areas(self) -> list[dict]:
         return await self.get("/areas")
 
     async def activate_scene(self, scene_id: str) -> dict:
         """POST /scenes/{id}/activate: run a scene."""
-        resp = await self._client.post(f"/scenes/{scene_id}/activate")
+        resp = await self._client.post(f"/scenes/{seg(scene_id)}/activate")
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {"ok": True, "scene_id": scene_id}
@@ -141,7 +153,7 @@ class HomeCoreClient:
         ``at`` (RFC 3339) evaluates time conditions as of that moment.
         """
         params = {"at": at} if at else None
-        resp = await self._client.post(f"/automations/{rule_id}/test", params=params)
+        resp = await self._client.post(f"/automations/{seg(rule_id)}/test", params=params)
         resp.raise_for_status()
         return resp.json()
 
@@ -182,7 +194,7 @@ class HomeCoreClient:
     ) -> dict:
         body: dict = dict(params or {})
         body["action"] = action
-        resp = await self._client.post(f"/plugins/{plugin_id}/command", json=body)
+        resp = await self._client.post(f"/plugins/{seg(plugin_id)}/command", json=body)
         resp.raise_for_status()
         return resp.json()
 
@@ -196,7 +208,7 @@ class HomeCoreClient:
         can read devices (``/command`` needs ``plugins:write``)."""
         body: dict = dict(params or {})
         body["action"] = action
-        resp = await self._client.post(f"/plugins/{plugin_id}/query", json=body)
+        resp = await self._client.post(f"/plugins/{seg(plugin_id)}/query", json=body)
         resp.raise_for_status()
         return resp.json()
 
@@ -207,7 +219,7 @@ class HomeCoreClient:
         declared action (`{"action": "<name>", ...params}`). The device's
         schema lists its writable attributes and actions.
         """
-        resp = await self._client.patch(f"/devices/{device_id}/state", json=command)
+        resp = await self._client.patch(f"/devices/{seg(device_id)}/state", json=command)
         resp.raise_for_status()
         # Some core paths return 204 No Content on success.
         if resp.status_code == 204 or not resp.content:
@@ -224,7 +236,7 @@ class HomeCoreClient:
         return await self._patch_automation(rule_id, {"priority": priority})
 
     async def _patch_automation(self, rule_id: str, patch: dict) -> dict:
-        resp = await self._client.patch(f"/automations/{rule_id}", json=patch)
+        resp = await self._client.patch(f"/automations/{seg(rule_id)}", json=patch)
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {"ok": True, "rule_id": rule_id, "patch": patch}
@@ -233,7 +245,7 @@ class HomeCoreClient:
     async def delete_automation(self, rule_id: str) -> dict:
         """DELETE /automations/{id} — removes the rule file. Core answers
         204 with no body."""
-        resp = await self._client.delete(f"/automations/{rule_id}")
+        resp = await self._client.delete(f"/automations/{seg(rule_id)}")
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {"ok": True, "rule_id": rule_id}
@@ -249,7 +261,7 @@ class HomeCoreClient:
 
     async def update_automation(self, rule_id: str, rule: dict) -> dict:
         """PUT /automations/{id} — full replace of the rule body."""
-        resp = await self._client.put(f"/automations/{rule_id}", json=rule)
+        resp = await self._client.put(f"/automations/{seg(rule_id)}", json=rule)
         resp.raise_for_status()
         if resp.status_code == 204 or not resp.content:
             return {"ok": True, "rule_id": rule_id}
@@ -277,7 +289,7 @@ class HomeCoreClient:
         """
         import json
 
-        path = f"/plugins/{plugin_id}/command/{request_id}/stream"
+        path = f"/plugins/{seg(plugin_id)}/command/{seg(request_id)}/stream"
         async with self._client.stream("GET", path, timeout=timeout_secs) as resp:
             resp.raise_for_status()
             data_buf: list[str] = []

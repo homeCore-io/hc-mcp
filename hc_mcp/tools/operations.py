@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from ..homecore_client import seg
 from ..server_state import client
 
 PLUGIN_OPS = ("start", "stop", "restart")
@@ -40,7 +41,7 @@ async def acknowledge_alert(alert_id: str) -> Any:
 
     Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or
     ``all``)."""
-    return await _send("POST", f"/alerts/{alert_id}/acknowledge", "acknowledge_alert")
+    return await _send("POST", f"/alerts/{seg(alert_id)}/acknowledge", "acknowledge_alert")
 
 
 async def resume_rule(rule_id: str) -> Any:
@@ -49,7 +50,7 @@ async def resume_rule(rule_id: str) -> Any:
 
     Write-gated: requires ``HC_MCP_ALLOW_WRITE=rule_mutations`` (or
     ``all``)."""
-    return await _send("DELETE", f"/automations/{rule_id}/pause", "resume_rule")
+    return await _send("DELETE", f"/automations/{seg(rule_id)}/pause", "resume_rule")
 
 
 async def room_lights(room_id: str, on: bool) -> Any:
@@ -62,7 +63,7 @@ async def room_lights(room_id: str, on: bool) -> Any:
 
     Write-gated: requires ``HC_MCP_ALLOW_WRITE=device_commands`` (or
     ``all``)."""
-    return await _send("POST", f"/areas/{room_id}/{'on' if on else 'off'}", "room_lights")
+    return await _send("POST", f"/areas/{seg(room_id)}/{'on' if on else 'off'}", "room_lights")
 
 
 async def plugin_control(plugin_id: str, op: str) -> Any:
@@ -78,7 +79,7 @@ async def plugin_control(plugin_id: str, op: str) -> Any:
     ``all``)."""
     if op not in PLUGIN_OPS:
         raise ValueError(f"op must be one of {', '.join(PLUGIN_OPS)}")
-    return await _send("POST", f"/plugins/{plugin_id}/{op}", "plugin_control")
+    return await _send("POST", f"/plugins/{seg(plugin_id)}/{seg(op)}", "plugin_control")
 
 
 async def set_plugin_log_level(plugin_id: str, level: str) -> Any:
@@ -94,5 +95,5 @@ async def set_plugin_log_level(plugin_id: str, level: str) -> Any:
     if level not in LOG_LEVELS:
         raise ValueError(f"level must be one of {', '.join(LOG_LEVELS)}")
     return await _send(
-        "PATCH", f"/plugins/{plugin_id}", "set_plugin_log_level", {"log_level": level}
+        "PATCH", f"/plugins/{seg(plugin_id)}", "set_plugin_log_level", {"log_level": level}
     )
